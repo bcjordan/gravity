@@ -1,7 +1,7 @@
-// Particle Gravity Simulation with Gravitational Lensing
+// Fireworks Designer Simulation
 import * as THREE from 'three';
 
-class ParticleGravitySimulator {
+class FireworksSimulator {
     constructor() {
         this.particles = [];
         this.scene = null;
@@ -9,29 +9,51 @@ class ParticleGravitySimulator {
         this.renderer = null;
         this.particleSystem = null;
         this.mousePosition = new THREE.Vector2(0, 0);
+        this.lastClick = new THREE.Vector2(0, 0);
+        this.isMouseDown = false;
+        this.lastLaunchTime = 0;
+        this.fireworks = [];
         
-        // Default configuration parameters with user's preferred settings
+        // Default configuration parameters
         this.config = {
-            particleCount: 50000,
-            particleSize: 2.4,
-            particleColor: '#ffffff', // White light base color (not used with random colors)
-            particleOpacity: 0.61,
-            gravityStrength: 1.0,
-            lensingStrength: 2.0,
-            velocityDamping: 0.99,
-            initialSpeed: 5.0,
-            particleSpread: 800,
-            colorMode: 'uniform', // Not used with our custom coloring
-            colorByVelocity: false,
-            colorByDistance: false,
-            showLensingEffect: true,
-            // Prism effect parameters
-            prismEffect: true,
-            prismRadius: 50,    // Smaller prism size (50)
-            prismStrength: 2.0, 
-            prismDispersion: 3.0,  // Maximum color dispersion strength
-            prismOpacity: 0.05,    // Subtle prism outline
-            ringOpacity: 0.2,      // Subtle ring opacity
+            particleCount: 15000,
+            particleSize: 3.0,
+            particleOpacity: 0.8,
+            gravity: 0.05,
+            friction: 0.98,
+            explosionForce: 3.0,
+            launchForce: 6.0,
+            trailEffect: true,
+            colorMode: 'rainbow',
+            launchOnClick: true,
+            autoLaunch: true,
+            autoLaunchInterval: 2000, // ms
+            
+            // Chemical reaction parameters
+            enableReactions: true,
+            reactionRadius: 5.0,
+            reactionProbability: 0.3,
+            sparkleEffect: true,
+            
+            // Particle types
+            chemicalTypes: [
+                { name: 'Strontium', color: '#ff0000', trailLength: 30, reactsWith: ['Copper'] }, // Red
+                { name: 'Copper', color: '#0000ff', trailLength: 20, reactsWith: ['Sodium'] },    // Blue
+                { name: 'Sodium', color: '#ffff00', trailLength: 15, reactsWith: ['Strontium'] }, // Yellow
+                { name: 'Barium', color: '#00ff00', trailLength: 25, reactsWith: ['Potassium'] }, // Green
+                { name: 'Potassium', color: '#800080', trailLength: 18, reactsWith: ['Barium'] }  // Purple
+            ],
+            
+            // Firework designs
+            patterns: [
+                { name: 'Spherical', function: (angle) => 1 },
+                { name: 'Heart', function: (angle) => 1 - Math.sin(angle) * Math.sqrt(Math.abs(Math.cos(angle))) / (Math.sin(angle) + 1.4) },
+                { name: 'Star', function: (angle) => 1 + 0.5 * Math.cos(angle * 5) },
+                { name: 'Ring', function: (angle) => 1.5 + Math.random() * 0.1 },
+                { name: 'Spiral', function: (angle) => angle / 10 }
+            ],
+            selectedPattern: 0,
+            
             resetSimulation: () => this.resetParticles()
         };
         
@@ -42,13 +64,13 @@ class ParticleGravitySimulator {
     }
     
     init() {
-        // Create the scene with a black background (for Dark Side of the Moon theme)
+        // Create the scene with a dark blue-black gradient background for night sky
         this.scene = new THREE.Scene();
-        this.scene.background = new THREE.Color(0x000000);
+        this.scene.background = new THREE.Color(0x000011);
         
         // Set up the camera - orthographic for true 2D view
         const aspect = window.innerWidth / window.innerHeight;
-        const frustumSize = 800;
+        const frustumSize = 1000;
         
         this.camera = new THREE.OrthographicCamera(
             frustumSize * aspect / -2,
@@ -70,10 +92,10 @@ class ParticleGravitySimulator {
         this.renderer.setPixelRatio(window.devicePixelRatio);
         this.renderer.setSize(window.innerWidth, window.innerHeight);
         
-        // Handle window resize for orthographic camera
+        // Handle window resize
         window.addEventListener('resize', () => {
             const aspect = window.innerWidth / window.innerHeight;
-            const frustumSize = 800;
+            const frustumSize = 1000;
             
             this.camera.left = frustumSize * aspect / -2;
             this.camera.right = frustumSize * aspect / 2;
@@ -84,82 +106,29 @@ class ParticleGravitySimulator {
             this.renderer.setSize(window.innerWidth, window.innerHeight);
         });
         
-        // Track mouse position for gravitational lensing
+        // Track mouse position for launching fireworks
         window.addEventListener('mousemove', (event) => {
             this.mousePosition.x = (event.clientX / window.innerWidth) * 2 - 1;
             this.mousePosition.y = -(event.clientY / window.innerHeight) * 2 + 1;
         });
         
+        // Track mouse clicks for launching fireworks
+        window.addEventListener('mousedown', (event) => {
+            this.isMouseDown = true;
+            this.lastClick.x = this.mousePosition.x * 500; // Convert to world coordinates
+            this.lastClick.y = this.mousePosition.y * 400;
+            
+            if (this.config.launchOnClick) {
+                this.launchFirework(this.lastClick.x, this.lastClick.y);
+            }
+        });
+        
+        window.addEventListener('mouseup', () => {
+            this.isMouseDown = false;
+        });
+        
         // Initialize particles
         this.createParticleSystem();
-    }
-    
-    // New method to update prism and ring geometry when radius changes
-    updatePrismGeometry() {
-        // Clean up existing prism and ring meshes
-        if (this.prismMesh) {
-            this.scene.remove(this.prismMesh);
-            this.prismMesh.geometry.dispose();
-            this.prismMesh.material.dispose();
-        }
-        if (this.ringMesh) {
-            this.scene.remove(this.ringMesh);
-            this.ringMesh.geometry.dispose();
-            this.ringMesh.material.dispose();
-        }
-        
-        // Create new prism geometry with current radius
-        const prismGeometry = new THREE.CircleGeometry(this.config.prismRadius, 64);
-        const prismMaterial = new THREE.MeshBasicMaterial({
-            color: 0x000000,
-            transparent: true,
-            opacity: this.config.prismOpacity,
-            side: THREE.DoubleSide
-        });
-        
-        // Add a colorful ring to show the prism boundary
-        const ringGeometry = new THREE.RingGeometry(
-            this.config.prismRadius - 1.5, 
-            this.config.prismRadius, 
-            64
-        );
-        
-        // Create a gradient texture for the ring
-        const ringCanvas = document.createElement('canvas');
-        ringCanvas.width = 128;
-        ringCanvas.height = 2;
-        const ctx = ringCanvas.getContext('2d');
-        const ringGradient = ctx.createLinearGradient(0, 0, ringCanvas.width, 0);
-        
-        // Rainbow gradient
-        ringGradient.addColorStop(0, '#ff0000');
-        ringGradient.addColorStop(1/6, '#ff8800');
-        ringGradient.addColorStop(2/6, '#ffff00');
-        ringGradient.addColorStop(3/6, '#00ff00');
-        ringGradient.addColorStop(4/6, '#00ffff');
-        ringGradient.addColorStop(5/6, '#0000ff');
-        ringGradient.addColorStop(1, '#ff00ff');
-        
-        ctx.fillStyle = ringGradient;
-        ctx.fillRect(0, 0, ringCanvas.width, ringCanvas.height);
-        
-        const rainbowTexture = new THREE.CanvasTexture(ringCanvas);
-        rainbowTexture.wrapS = THREE.RepeatWrapping;
-        
-        const ringMaterial = new THREE.MeshBasicMaterial({
-            map: rainbowTexture,
-            transparent: true,
-            opacity: this.config.ringOpacity,
-            side: THREE.DoubleSide
-        });
-        
-        // Create both prism circle and rainbow ring
-        this.prismMesh = new THREE.Mesh(prismGeometry, prismMaterial);
-        this.scene.add(this.prismMesh);
-        
-        // Add the rainbow ring
-        this.ringMesh = new THREE.Mesh(ringGeometry, ringMaterial);
-        this.scene.add(this.ringMesh);
     }
     
     createParticleSystem() {
@@ -170,116 +139,75 @@ class ParticleGravitySimulator {
             this.particleSystem.material.dispose();
         }
         
-        // Create the central prism shape (visible when no particles are in it)
-        this.updatePrismGeometry();
-        
         // Create particle geometry
         const geometry = new THREE.BufferGeometry();
         const positions = new Float32Array(this.config.particleCount * 3);
         const colors = new Float32Array(this.config.particleCount * 3);
-        const velocities = new Float32Array(this.config.particleCount * 3);
+        const sizes = new Float32Array(this.config.particleCount);
+        const types = new Float32Array(this.config.particleCount);
+        const lifetimes = new Float32Array(this.config.particleCount);
+        
+        // Create our array to track particle velocities
+        this.velocities = new Float32Array(this.config.particleCount * 3);
+        this.trails = [];
         
         for (let i = 0; i < this.config.particleCount; i++) {
-            // Calculate the array index
             const i3 = i * 3;
             
-            // Random position in a 2D circle - flat distribution
-            // Avoid placing too many particles directly in the prism
-            let radius, theta;
+            // Start particles off-screen (inactive)
+            positions[i3] = 0;
+            positions[i3 + 1] = -1000; // Below the screen
+            positions[i3 + 2] = 0;
             
-            if (Math.random() < 0.7) {
-                // 70% of particles outside the prism or at the edge
-                radius = this.config.prismRadius * 0.5 + this.config.particleSpread * Math.sqrt(Math.random() * 0.8); 
-            } else {
-                // 30% of particles inside the prism
-                radius = this.config.prismRadius * Math.sqrt(Math.random()); 
-            }
+            // Initialize with zero velocity
+            this.velocities[i3] = 0;
+            this.velocities[i3 + 1] = 0;
+            this.velocities[i3 + 2] = 0;
             
-            theta = Math.random() * Math.PI * 2;
+            // Random particle sizes (smaller for more realism)
+            sizes[i] = Math.random() * 2 + 1;
             
-            positions[i3] = radius * Math.cos(theta);     // x position
-            positions[i3 + 1] = radius * Math.sin(theta); // y position
-            positions[i3 + 2] = 0;                        // z is always 0 (flat 2D)
+            // Set random chemical type
+            types[i] = Math.floor(Math.random() * this.config.chemicalTypes.length);
             
-            // Initial velocities (tangential to create orbital motion)
-            // Calculate position vector and perpendicular vector for orbital velocity
-            const px = positions[i3];
-            const py = positions[i3 + 1];
-            
-            // Normalize the position vector
-            const dist = Math.sqrt(px * px + py * py);
-            if (dist > 0.1) {
-                // Calculate perpendicular vector (for orbital motion)
-                const perpX = -py / dist;
-                const perpY = px / dist;
-                
-                // Apply orbital velocity with some randomization
-                const speed = this.config.initialSpeed * (0.8 + Math.random() * 0.4);
-                velocities[i3] = perpX * speed;
-                velocities[i3 + 1] = perpY * speed;
-            } else {
-                // Random velocity for particles near center
-                velocities[i3] = Math.random() * this.config.initialSpeed - this.config.initialSpeed/2;
-                velocities[i3 + 1] = Math.random() * this.config.initialSpeed - this.config.initialSpeed/2;
-            }
-            velocities[i3 + 2] = 0; // No z velocity for 2D
-            
-            // Set pure, vibrant colors from across the spectrum (no pastels)
-            // More extreme pure colors for better dispersion visualization
-            let color;
-            
-            // Choose from several approaches for broader color diversity
-            const colorMode = Math.floor(Math.random() * 3);
-            
-            if (colorMode === 0) {
-                // Pure spectral colors (red, orange, yellow, green, blue, violet)
-                const hueOptions = [0, 0.05, 0.1, 0.2, 0.3, 0.45, 0.55, 0.6, 0.7, 0.75, 0.8, 0.85];
-                const randomHue = hueOptions[Math.floor(Math.random() * hueOptions.length)];
-                color = new THREE.Color();
-                color.setHSL(randomHue, 1.0, 0.5);
-            } else if (colorMode === 1) {
-                // RGB primaries and secondaries for maximum contrast
-                const pureColors = [
-                    0xff0000, // Red
-                    0x00ff00, // Green
-                    0x0000ff, // Blue
-                    0xffff00, // Yellow
-                    0x00ffff, // Cyan
-                    0xff00ff  // Magenta
-                ];
-                color = new THREE.Color(pureColors[Math.floor(Math.random() * pureColors.length)]);
-            } else {
-                // Full random but with full saturation
-                color = new THREE.Color();
-                color.setHSL(Math.random(), 1.0, 0.5);
-            }
+            // Get color from the chemical type
+            const chemicalType = this.config.chemicalTypes[Math.floor(types[i])];
+            const color = new THREE.Color(chemicalType.color);
             
             colors[i3] = color.r;
             colors[i3 + 1] = color.g;
             colors[i3 + 2] = color.b;
+            
+            // Initialize lifetime (will be set properly when particle becomes active)
+            lifetimes[i] = 0;
+            
+            // Initialize empty trail for each particle
+            this.trails.push([]);
         }
-        
-        // Store velocities for physics calculation
-        this.velocities = velocities;
         
         // Set attributes for the geometry
         geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
         geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+        geometry.setAttribute('size', new THREE.BufferAttribute(sizes, 1));
         
-        // Create particle material with simple circular point texture
+        // Store custom attributes for later use
+        this.particleTypes = types;
+        this.particleLifetimes = lifetimes;
+        
+        // Create particle texture with a glowing dot
         const canvas = document.createElement('canvas');
-        canvas.width = 32;
-        canvas.height = 32;
+        canvas.width = 64;
+        canvas.height = 64;
         
         const context = canvas.getContext('2d');
-        const gradient = context.createRadialGradient(16, 16, 0, 16, 16, 16);
+        const gradient = context.createRadialGradient(32, 32, 0, 32, 32, 32);
         gradient.addColorStop(0, 'rgba(255, 255, 255, 1)');
-        gradient.addColorStop(0.3, 'rgba(160, 255, 255, 0.8)');
-        gradient.addColorStop(0.7, 'rgba(80, 180, 255, 0.3)');
-        gradient.addColorStop(1, 'rgba(0, 0, 64, 0)');
+        gradient.addColorStop(0.2, 'rgba(255, 240, 220, 0.8)');
+        gradient.addColorStop(0.4, 'rgba(240, 180, 110, 0.5)');
+        gradient.addColorStop(1, 'rgba(0, 0, 0, 0)');
         
         context.fillStyle = gradient;
-        context.fillRect(0, 0, 32, 32);
+        context.fillRect(0, 0, 64, 64);
         
         const sprite = new THREE.CanvasTexture(canvas);
         
@@ -289,9 +217,9 @@ class ParticleGravitySimulator {
             transparent: true,
             opacity: this.config.particleOpacity,
             blending: THREE.AdditiveBlending,
-            sizeAttenuation: true,
             depthWrite: false,
-            map: sprite
+            map: sprite,
+            sizeAttenuation: true
         });
         
         // Create the particle system
@@ -299,226 +227,421 @@ class ParticleGravitySimulator {
         this.scene.add(this.particleSystem);
     }
     
-    updateParticleColors() {
-        // We're no longer updating colors in animation loop
-        // All particles keep their initial random colors
-        // This simulates white light being split by the prism
-
-        // This function is now just a placeholder in case we need to re-enable color updating
-        // But we do still need to mark colors for update in case other code modifies them
-        this.particleSystem.geometry.attributes.color.needsUpdate = true;
+    launchFirework(x, y) {
+        // Check if we have available particles
+        const positions = this.particleSystem.geometry.attributes.position.array;
+        const colors = this.particleSystem.geometry.attributes.color.array;
+        
+        // Don't launch too frequently
+        const now = Date.now();
+        if (now - this.lastLaunchTime < 300) {
+            return;
+        }
+        this.lastLaunchTime = now;
+        
+        // Number of particles in the firework
+        const particleCount = 1; // Just the shell initially
+        let availableCount = 0;
+        let startIndex = -1;
+        
+        // Find available particles
+        for (let i = 0; i < this.config.particleCount; i++) {
+            const i3 = i * 3;
+            if (positions[i3 + 1] < -500) { // If the particle is inactive (below screen)
+                if (startIndex === -1) {
+                    startIndex = i; // Mark the first available particle
+                }
+                availableCount++;
+                if (availableCount >= particleCount) {
+                    break;
+                }
+            }
+        }
+        
+        if (availableCount >= particleCount && startIndex !== -1) {
+            // Calculate a random launch angle (slightly randomized from straight up)
+            const launchAngle = Math.PI/2 + (Math.random() * 0.2 - 0.1);
+            
+            // Create the firework shell particle
+            const i3 = startIndex * 3;
+            
+            // Start at bottom of screen with random x position if none provided
+            positions[i3] = x !== undefined ? x : (Math.random() * 800 - 400);
+            positions[i3 + 1] = -400; // Bottom of screen
+            positions[i3 + 2] = 0;
+            
+            // Random chemical type for this firework
+            const typeIndex = Math.floor(Math.random() * this.config.chemicalTypes.length);
+            this.particleTypes[startIndex] = typeIndex;
+            
+            // Set the color based on chemical type
+            const chemicalType = this.config.chemicalTypes[typeIndex];
+            const color = new THREE.Color(chemicalType.color);
+            
+            colors[i3] = color.r;
+            colors[i3 + 1] = color.g;
+            colors[i3 + 2] = color.b;
+            
+            // Initial upward velocity
+            this.velocities[i3] = Math.cos(launchAngle) * this.config.launchForce * (0.8 + Math.random() * 0.4);
+            this.velocities[i3 + 1] = Math.sin(launchAngle) * this.config.launchForce * (0.8 + Math.random() * 0.4);
+            this.velocities[i3 + 2] = 0;
+            
+            // Set lifetime - shell particle lives until it explodes
+            this.particleLifetimes[startIndex] = 60 + Math.random() * 40; // Random height for explosion
+            
+            // Store the firework info for later explosion
+            this.fireworks.push({
+                particleIndex: startIndex,
+                type: typeIndex,
+                pattern: this.config.selectedPattern
+            });
+            
+            // Update attributes that have changed
+            this.particleSystem.geometry.attributes.position.needsUpdate = true;
+            this.particleSystem.geometry.attributes.color.needsUpdate = true;
+        }
+    }
+    
+    explodeFirework(fireworkIndex) {
+        const positions = this.particleSystem.geometry.attributes.position.array;
+        const colors = this.particleSystem.geometry.attributes.color.array;
+        const sizes = this.particleSystem.geometry.attributes.size.array;
+        
+        const firework = this.fireworks[fireworkIndex];
+        const shellIndex = firework.particleIndex;
+        const shellIndex3 = shellIndex * 3;
+        
+        // Get the position where the shell exploded
+        const explosionX = positions[shellIndex3];
+        const explosionY = positions[shellIndex3 + 1];
+        
+        // Number of particles in the explosion
+        const explosionSize = 100 + Math.floor(Math.random() * 150);
+        let availableCount = 0;
+        let startIndex = -1;
+        
+        // Find available particles
+        for (let i = 0; i < this.config.particleCount; i++) {
+            if (i === shellIndex) continue; // Skip the shell particle
+            
+            const i3 = i * 3;
+            if (positions[i3 + 1] < -500) { // If the particle is inactive
+                if (startIndex === -1) {
+                    startIndex = i;
+                }
+                availableCount++;
+                if (availableCount >= explosionSize) {
+                    break;
+                }
+            }
+        }
+        
+        // Create the explosion if we have enough particles
+        if (availableCount >= explosionSize && startIndex !== -1) {
+            // Get the pattern function
+            const patternFunc = this.config.patterns[firework.pattern].function;
+            
+            // The chemical type of the shell determines explosion color
+            const mainType = firework.type;
+            const mainColor = new THREE.Color(this.config.chemicalTypes[mainType].color);
+            
+            // Create the explosion particles
+            for (let i = 0; i < explosionSize; i++) {
+                const particleIndex = startIndex + i;
+                if (particleIndex >= this.config.particleCount) break;
+                
+                const i3 = particleIndex * 3;
+                
+                // All particles start at explosion center
+                positions[i3] = explosionX;
+                positions[i3 + 1] = explosionY;
+                positions[i3 + 2] = 0;
+                
+                // Create explosion pattern
+                // Random angle and distance based on pattern
+                const angle = Math.random() * Math.PI * 2;
+                const distance = patternFunc(angle) * this.config.explosionForce;
+                
+                // Set velocity based on pattern
+                this.velocities[i3] = Math.cos(angle) * distance;
+                this.velocities[i3 + 1] = Math.sin(angle) * distance;
+                this.velocities[i3 + 2] = 0;
+                
+                // Randomize particle size
+                sizes[particleIndex] = Math.random() * 2 + 1;
+                
+                // Determine chemical type - mostly same as shell, some random
+                let particleType;
+                if (Math.random() < 0.8) {
+                    // 80% same as main type
+                    particleType = mainType;
+                } else {
+                    // 20% random type
+                    particleType = Math.floor(Math.random() * this.config.chemicalTypes.length);
+                }
+                this.particleTypes[particleIndex] = particleType;
+                
+                // Set color based on chemical type with some variation
+                const baseColor = new THREE.Color(this.config.chemicalTypes[particleType].color);
+                // Slightly randomize color for more natural look
+                const color = new THREE.Color(
+                    baseColor.r * (0.9 + Math.random() * 0.2),
+                    baseColor.g * (0.9 + Math.random() * 0.2),
+                    baseColor.b * (0.9 + Math.random() * 0.2)
+                );
+                
+                colors[i3] = color.r;
+                colors[i3 + 1] = color.g;
+                colors[i3 + 2] = color.b;
+                
+                // Set lifetime for the particle
+                this.particleLifetimes[particleIndex] = 30 + Math.random() * 50;
+                
+                // Clear any existing trails
+                this.trails[particleIndex] = [];
+            }
+            
+            // Deactivate the shell particle
+            positions[shellIndex3 + 1] = -1000; // Move below screen
+            this.particleLifetimes[shellIndex] = 0;
+            
+            // Update the attributes that changed
+            this.particleSystem.geometry.attributes.position.needsUpdate = true;
+            this.particleSystem.geometry.attributes.color.needsUpdate = true;
+            this.particleSystem.geometry.attributes.size.needsUpdate = true;
+        }
+        
+        // Remove the firework from our tracking array
+        this.fireworks.splice(fireworkIndex, 1);
     }
     
     updateParticlePhysics() {
         const positions = this.particleSystem.geometry.attributes.position.array;
         const colors = this.particleSystem.geometry.attributes.color.array;
+        const sizes = this.particleSystem.geometry.attributes.size.array;
         
-        // Convert mouse position from normalized device coordinates to world space
-        const mouseWorld = new THREE.Vector3(
-            this.mousePosition.x * 400,
-            this.mousePosition.y * 400,
-            0
-        );
-        
-        for (let i = 0; i < this.config.particleCount; i++) {
-            const i3 = i * 3;
+        // Check for fireworks that need to explode
+        for (let i = this.fireworks.length - 1; i >= 0; i--) {
+            const firework = this.fireworks[i];
+            const particleIndex = firework.particleIndex;
             
-            // Current position vector - always in 2D plane
-            const particlePos = new THREE.Vector2(
-                positions[i3],
-                positions[i3 + 1]
-            );
-            
-            // Apply weak gravity toward center of simulation (stable orbits)
-            if (this.config.gravityStrength > 0) {
-                // Weak central gravity for orbital stability
-                const toCenterX = -positions[i3];
-                const toCenterY = -positions[i3 + 1];
-                const centerDist = Math.sqrt(toCenterX * toCenterX + toCenterY * toCenterY);
-                
-                if (centerDist > 1.0) {
-                    const centralForce = 0.01 * this.config.gravityStrength / (centerDist * centerDist);
-                    this.velocities[i3] += toCenterX / centerDist * centralForce;
-                    this.velocities[i3 + 1] += toCenterY / centerDist * centralForce;
-                }
-            }
-            
-            // Apply prism/lens effect in the center - DARK SIDE OF THE MOON
-            if (this.config.prismEffect) {
-                const toCenterX = -positions[i3];
-                const toCenterY = -positions[i3 + 1];
-                const centerDist = Math.sqrt(toCenterX * toCenterX + toCenterY * toCenterY);
-                
-                // Get the particle's color components
-                const r = colors[i3];
-                const g = colors[i3 + 1];
-                const b = colors[i3 + 2];
-                
-                // Calculate color-based dispersion within and around the prism radius
-                if (centerDist < this.config.prismRadius * 1.5) {
-                    // Normalize direction vector
-                    const dirX = toCenterX / centerDist;
-                    const dirY = toCenterY / centerDist;
-                    
-                    // Different force for each color component (red, green, blue)
-                    // This simulates dispersion - red, green, and blue light bend differently
-                    let dispersionForce;
-                    
-                    if (centerDist < this.config.prismRadius) {
-                        // Inside the prism radius - dispersive force pushing outward
-                        // Force increases as particles get closer to edge
-                        const normalizedDist = centerDist / this.config.prismRadius;
-                        dispersionForce = this.config.prismStrength * normalizedDist;
-                        
-                        // Keep original particle color inside prism
-                        // We're not changing colors inside, just when they exit
-                    } else {
-                        // Outside but near the prism - lensing effect
-                        // Force decreases with distance from the edge
-                        const outsideDistance = centerDist - this.config.prismRadius;
-                        const falloff = Math.max(0, 1 - outsideDistance / (this.config.prismRadius * 0.5));
-                        dispersionForce = -this.config.prismStrength * 0.5 * falloff;
-                    }
-                    
-                    // MUCH stronger color-dependent dispersion for extreme prism effect
-                    // Wavelength-dependent refraction index (physics-based)
-                    const rForce = dispersionForce * (1.0 - this.config.prismDispersion * 0.6); // Red bends least
-                    const gForce = dispersionForce * 1.1;                                        // Green medium
-                    const bForce = dispersionForce * (1.0 + this.config.prismDispersion * 0.8); // Blue bends most
-                    
-                    // Exaggerate color separation based on color dominance
-                    let dominantForce;
-                    const colorSum = r + g + b;
-                    
-                    // Find the dominant color component (RGB)
-                    if (r > g * 1.5 && r > b * 1.5) {
-                        // Strongly red dominant - much less bending
-                        dominantForce = rForce * 0.5;
-                        
-                        // Add perpendicular "rainbow" motion for stronger separation
-                        // This creates a more dramatic spreading effect
-                        const perpX = -dirY;
-                        const perpY = dirX;
-                        this.velocities[i3] += perpX * rForce * 0.3;
-                        this.velocities[i3 + 1] += perpY * rForce * 0.3;
-                    } else if (g > r * 1.5 && g > b * 1.5) {
-                        // Strongly green dominant - medium bending
-                        dominantForce = gForce * 0.8;
-                        
-                        // No perpendicular motion for green - straight path
-                    } else if (b > r * 1.5 && b > g * 1.5) {
-                        // Strongly blue dominant - much more bending
-                        dominantForce = bForce * 1.8;
-                        
-                        // Add opposite perpendicular motion for blues
-                        const perpX = dirY;
-                        const perpY = -dirX;
-                        this.velocities[i3] += perpX * bForce * 0.4;
-                        this.velocities[i3 + 1] += perpY * bForce * 0.4;
-                    } else {
-                        // Mixed colors - weighted average based on RGB components
-                        dominantForce = (r * rForce + g * gForce + b * bForce) / Math.max(0.1, colorSum);
-                    }
-                    
-                    // Apply primary force with random jitter
-                    const jitter = (Math.random() * 0.3 - 0.15) * dispersionForce; // More randomness
-                    this.velocities[i3] -= dirX * (dominantForce + jitter);
-                    this.velocities[i3 + 1] -= dirY * (dominantForce + jitter);
-                }
-            }
-            
-            // Create gravitational lensing effect around mouse position
-            // Mouse creates a gravitational well that bends particle paths
-            const toMouseX = mouseWorld.x - positions[i3];
-            const toMouseY = mouseWorld.y - positions[i3 + 1];
-            const mouseDistance = Math.sqrt(toMouseX * toMouseX + toMouseY * toMouseY);
-            
-            if (mouseDistance > 0.1) {
-                // Apply gravitational force around mouse cursor
-                let gravityForce = 0;
-                
-                if (this.config.showLensingEffect) {
-                    // Apply lensing force - stronger when closer to mouse
-                    gravityForce = this.config.lensingStrength / Math.max(mouseDistance * 0.05, 0.1);
-                }
-                
-                if (this.config.gravityStrength > 0) {
-                    // Add main gravity effect from mouse 
-                    gravityForce += this.config.gravityStrength / Math.max(mouseDistance * 0.1, 0.5);
-                }
-                
-                // Normalize the direction vector
-                const norm = 1 / mouseDistance;
-                const dirX = toMouseX * norm;
-                const dirY = toMouseY * norm;
-                
-                // Apply gravitational acceleration toward mouse
-                this.velocities[i3] += dirX * gravityForce;
-                this.velocities[i3 + 1] += dirY * gravityForce;
-                this.velocities[i3 + 2] = 0; // Keep z velocity at 0
-            }
-            
-            // Apply velocity damping (simulates friction)
-            this.velocities[i3] *= this.config.velocityDamping;
-            this.velocities[i3 + 1] *= this.config.velocityDamping;
-            this.velocities[i3 + 2] *= this.config.velocityDamping;
-            
-            // Update positions based on velocities - enforce 2D
-            positions[i3] += this.velocities[i3];
-            positions[i3 + 1] += this.velocities[i3 + 1];
-            positions[i3 + 2] = 0; // Keep z position at 0
-            
-            // Boundary check - wrap particles that go too far away
-            const maxDistance = this.config.particleSpread * 2;
-            const distanceFromCenter = Math.sqrt(
-                positions[i3] * positions[i3] + 
-                positions[i3 + 1] * positions[i3 + 1]
-            );
-            
-            if (distanceFromCenter > maxDistance) {
-                // Option 1: Reset particle to a new position with orbital velocity
-                if (Math.random() < 0.3) {
-                    // New position on a random point of the circle
-                    const newRadius = this.config.particleSpread * Math.sqrt(Math.random());
-                    const newAngle = Math.random() * Math.PI * 2;
-                    
-                    // Set new position
-                    positions[i3] = newRadius * Math.cos(newAngle);
-                    positions[i3 + 1] = newRadius * Math.sin(newAngle);
-                    
-                    // Calculate orbital velocity at this radius
-                    const perpX = -positions[i3 + 1] / newRadius;
-                    const perpY = positions[i3] / newRadius;
-                    const speed = this.config.initialSpeed * (0.8 + Math.random() * 0.4);
-                    
-                    // Set new velocity (orbital motion)
-                    this.velocities[i3] = perpX * speed;
-                    this.velocities[i3 + 1] = perpY * speed;
-                    this.velocities[i3 + 2] = 0;
-                } 
-                // Option 2: Bounce off an invisible boundary
-                else {
-                    // Normalize the position vector to the edge
-                    const factor = maxDistance / distanceFromCenter;
-                    positions[i3] = positions[i3] * factor * 0.9;
-                    positions[i3 + 1] = positions[i3 + 1] * factor * 0.9;
-                    
-                    // Reflect velocity (bounce off the boundary)
-                    const normalX = -positions[i3] / distanceFromCenter;
-                    const normalY = -positions[i3 + 1] / distanceFromCenter;
-                    
-                    // Calculate dot product of velocity and normal
-                    const dot = this.velocities[i3] * normalX + this.velocities[i3 + 1] * normalY;
-                    
-                    // Reflect velocity with some energy loss
-                    this.velocities[i3] = (this.velocities[i3] - 2 * dot * normalX) * 0.5;
-                    this.velocities[i3 + 1] = (this.velocities[i3 + 1] - 2 * dot * normalY) * 0.5;
-                }
+            // Check if this shell's lifetime is over or velocity is negative (falling)
+            if (this.particleLifetimes[particleIndex] <= 0 || 
+                this.velocities[particleIndex * 3 + 1] < 0) {
+                this.explodeFirework(i);
             }
         }
         
-        // Mark the position attribute for update
+        // Auto-launch fireworks if enabled
+        if (this.config.autoLaunch) {
+            const now = Date.now();
+            if (now - this.lastLaunchTime > this.config.autoLaunchInterval) {
+                this.launchFirework();
+            }
+        }
+        
+        // Update all particle positions based on their velocities
+        for (let i = 0; i < this.config.particleCount; i++) {
+            const i3 = i * 3;
+            
+            // Skip inactive particles
+            if (positions[i3 + 1] < -500) continue;
+            
+            // Get the chemical type for this particle
+            const typeIndex = this.particleTypes[i];
+            const chemicalType = this.config.chemicalTypes[typeIndex];
+            
+            // Add to particle trail if enabled
+            if (this.config.trailEffect && positions[i3 + 1] > -400) {
+                // Create a copy of the current position
+                this.trails[i].push({
+                    x: positions[i3],
+                    y: positions[i3 + 1],
+                    z: positions[i3 + 2],
+                    life: 10 // Lifetime of trail point
+                });
+                
+                // Limit trail length based on chemical type
+                if (this.trails[i].length > chemicalType.trailLength) {
+                    this.trails[i].shift();
+                }
+            }
+            
+            // Apply gravity
+            this.velocities[i3 + 1] -= this.config.gravity;
+            
+            // Apply air friction
+            this.velocities[i3] *= this.config.friction;
+            this.velocities[i3 + 1] *= this.config.friction;
+            this.velocities[i3 + 2] *= this.config.friction;
+            
+            // Update position
+            positions[i3] += this.velocities[i3];
+            positions[i3 + 1] += this.velocities[i3 + 1];
+            positions[i3 + 2] += this.velocities[i3 + 2];
+            
+            // Decrease lifetime
+            this.particleLifetimes[i]--;
+            
+            // Handle chemical reactions if enabled
+            if (this.config.enableReactions && Math.random() < this.config.reactionProbability * 0.1) {
+                // Find nearby particles to react with
+                for (let j = 0; j < this.config.particleCount; j++) {
+                    if (i === j || positions[j * 3 + 1] < -500) continue; // Skip self or inactive particles
+                    
+                    const j3 = j * 3;
+                    const dx = positions[i3] - positions[j3];
+                    const dy = positions[i3 + 1] - positions[j3 + 1];
+                    const dist = Math.sqrt(dx * dx + dy * dy);
+                    
+                    // If particles are close enough and can react
+                    if (dist < this.config.reactionRadius) {
+                        const otherTypeIndex = this.particleTypes[j];
+                        const otherType = this.config.chemicalTypes[otherTypeIndex];
+                        
+                        // Check if these chemicals react
+                        if (chemicalType.reactsWith.includes(otherType.name)) {
+                            // Create a new color - blend between the two
+                            const color1 = new THREE.Color(chemicalType.color);
+                            const color2 = new THREE.Color(otherType.color);
+                            const newColor = new THREE.Color();
+                            
+                            // Weighted color blend based on sparkle effect
+                            if (this.config.sparkleEffect && Math.random() < 0.5) {
+                                // Bright white flash for sparkle
+                                newColor.setRGB(1, 1, 1);
+                                // Increase size temporarily
+                                sizes[i] *= 1.5;
+                            } else {
+                                // Normal color blending
+                                newColor.r = (color1.r + color2.r) * 0.5;
+                                newColor.g = (color1.g + color2.g) * 0.5;
+                                newColor.b = (color1.b + color2.b) * 0.5;
+                            }
+                            
+                            // Apply new color
+                            colors[i3] = newColor.r;
+                            colors[i3 + 1] = newColor.g;
+                            colors[i3 + 2] = newColor.b;
+                            
+                            // Give the particle a small velocity boost in a random direction
+                            const angle = Math.random() * Math.PI * 2;
+                            const force = 0.2 + Math.random() * 0.3;
+                            this.velocities[i3] += Math.cos(angle) * force;
+                            this.velocities[i3 + 1] += Math.sin(angle) * force;
+                            
+                            // Extend particle lifetime
+                            this.particleLifetimes[i] += 5 + Math.random() * 10;
+                            
+                            break; // Only react once per frame
+                        }
+                    }
+                }
+            }
+            
+            // Check if particle lifetime is over
+            if (this.particleLifetimes[i] <= 0) {
+                // Gradually fade out by making particle smaller
+                sizes[i] *= 0.95;
+                
+                // When size is very small, deactivate
+                if (sizes[i] < 0.3) {
+                    positions[i3 + 1] = -1000; // Move below screen to deactivate
+                    this.trails[i] = []; // Clear trail
+                }
+            } else {
+                // Sparkling effect - occasionally change brightness
+                if (this.config.sparkleEffect && Math.random() < 0.05) {
+                    const sparkFactor = 0.8 + Math.random() * 0.4;
+                    colors[i3] = Math.min(1, colors[i3] * sparkFactor);
+                    colors[i3 + 1] = Math.min(1, colors[i3 + 1] * sparkFactor);
+                    colors[i3 + 2] = Math.min(1, colors[i3 + 2] * sparkFactor);
+                }
+            }
+            
+            // Boundary check - deactivate particles that go too far out
+            if (positions[i3] < -600 || positions[i3] > 600 || positions[i3 + 1] < -500 || positions[i3 + 1] > 500) {
+                positions[i3 + 1] = -1000; // Move below screen to deactivate
+                this.trails[i] = []; // Clear trail
+            }
+        }
+        
+        // Update trails
+        this.updateTrails();
+        
+        // Mark attribute buffers for update
         this.particleSystem.geometry.attributes.position.needsUpdate = true;
+        this.particleSystem.geometry.attributes.color.needsUpdate = true;
+        this.particleSystem.geometry.attributes.size.needsUpdate = true;
+    }
+    
+    updateTrails() {
+        if (!this.config.trailEffect) return;
+        
+        // Remove any existing trail meshes
+        if (this.trailMeshes) {
+            for (let i = 0; i < this.trailMeshes.length; i++) {
+                this.scene.remove(this.trailMeshes[i]);
+            }
+        }
+        
+        this.trailMeshes = [];
+        
+        // Draw trails as line segments
+        for (let i = 0; i < this.config.particleCount; i++) {
+            const trail = this.trails[i];
+            if (trail.length < 2) continue;
+            
+            // Decrease lifetime of trail points
+            for (let j = 0; j < trail.length; j++) {
+                trail[j].life--;
+            }
+            
+            // Remove trail points that have expired
+            while (trail.length > 0 && trail[0].life <= 0) {
+                trail.shift();
+            }
+            
+            if (trail.length < 2) continue;
+            
+            // Create line for this trail
+            const lineGeometry = new THREE.BufferGeometry();
+            const linePositions = new Float32Array(trail.length * 3);
+            const lineColors = new Float32Array(trail.length * 3);
+            
+            // Get the particle's chemical type for trail color
+            const typeIndex = this.particleTypes[i];
+            const chemicalType = this.config.chemicalTypes[typeIndex];
+            const color = new THREE.Color(chemicalType.color);
+            
+            for (let j = 0; j < trail.length; j++) {
+                const j3 = j * 3;
+                linePositions[j3] = trail[j].x;
+                linePositions[j3 + 1] = trail[j].y;
+                linePositions[j3 + 2] = trail[j].z;
+                
+                // Fade trail based on position in trail
+                const alpha = j / trail.length;
+                lineColors[j3] = color.r;
+                lineColors[j3 + 1] = color.g;
+                lineColors[j3 + 2] = color.b;
+            }
+            
+            lineGeometry.setAttribute('position', new THREE.BufferAttribute(linePositions, 3));
+            lineGeometry.setAttribute('color', new THREE.BufferAttribute(lineColors, 3));
+            
+            const lineMaterial = new THREE.LineBasicMaterial({
+                vertexColors: true,
+                blending: THREE.AdditiveBlending,
+                transparent: true,
+                opacity: 0.5
+            });
+            
+            const line = new THREE.Line(lineGeometry, lineMaterial);
+            this.scene.add(line);
+            this.trailMeshes.push(line);
+        }
     }
     
     resetParticles() {
@@ -527,55 +650,52 @@ class ParticleGravitySimulator {
     }
     
     setupGUI() {
-        const gui = new dat.GUI({closed: true}); // Start with UI closed
+        const gui = new dat.GUI({closed: false});
+        
+        // Firework controls
+        const fireworkFolder = gui.addFolder('◉ FIREWORK CONTROLS');
+        fireworkFolder.add(this.config, 'launchOnClick').name('CLICK TO LAUNCH');
+        fireworkFolder.add(this.config, 'autoLaunch').name('AUTO LAUNCH');
+        fireworkFolder.add(this.config, 'autoLaunchInterval', 500, 5000).name('LAUNCH INTERVAL');
+        fireworkFolder.add(this.config, 'explosionForce', 1, 5).name('EXPLOSION SIZE');
+        fireworkFolder.add(this.config, 'launchForce', 3, 10).name('LAUNCH POWER');
+        
+        // Pattern selector
+        const patternOptions = {};
+        this.config.patterns.forEach((pattern, index) => {
+            patternOptions[pattern.name] = index;
+        });
+        fireworkFolder.add(this.config, 'selectedPattern', patternOptions).name('PATTERN');
+        
+        fireworkFolder.open();
+        
+        // Physics controls
+        const physicsFolder = gui.addFolder('◉ PHYSICS');
+        physicsFolder.add(this.config, 'gravity', 0.01, 0.2).name('GRAVITY');
+        physicsFolder.add(this.config, 'friction', 0.9, 1).name('AIR FRICTION');
+        physicsFolder.add(this.config, 'trailEffect').name('ENABLE TRAILS');
+        physicsFolder.open();
+        
+        // Chemical controls
+        const chemicalFolder = gui.addFolder('◉ CHEMICAL EFFECTS');
+        chemicalFolder.add(this.config, 'enableReactions').name('ENABLE REACTIONS');
+        chemicalFolder.add(this.config, 'reactionRadius', 1, 20).name('REACTION RADIUS');
+        chemicalFolder.add(this.config, 'reactionProbability', 0.1, 1).name('REACTION CHANCE');
+        chemicalFolder.add(this.config, 'sparkleEffect').name('SPARKLE EFFECT');
+        chemicalFolder.open();
         
         // Particle appearance
-        const appearanceFolder = gui.addFolder('◉ PARTICLE SETTINGS');
-        appearanceFolder.add(this.config, 'particleCount', 100, 50000).step(100).name('PARTICLE COUNT').onChange(() => this.resetParticles());
-        appearanceFolder.add(this.config, 'particleSize', 0.5, 8).name('PARTICLE SIZE').onChange(value => {
+        const appearanceFolder = gui.addFolder('◉ APPEARANCE');
+        appearanceFolder.add(this.config, 'particleCount', 1000, 30000).step(1000).name('PARTICLE COUNT').onChange(() => this.resetParticles());
+        appearanceFolder.add(this.config, 'particleSize', 1, 5).name('PARTICLE SIZE').onChange(value => {
             this.particleSystem.material.size = value;
         });
-        appearanceFolder.addColor(this.config, 'particleColor').name('BASE COLOR');
         appearanceFolder.add(this.config, 'particleOpacity', 0, 1).name('OPACITY').onChange(value => {
             this.particleSystem.material.opacity = value;
         });
-        appearanceFolder.add(this.config, 'colorMode', ['uniform', 'rainbow']).name('COLOR MODE');
-        appearanceFolder.add(this.config, 'colorByVelocity').name('VELOCITY COLORS');
-        appearanceFolder.add(this.config, 'colorByDistance').name('DISTANCE COLORS');
         appearanceFolder.open();
         
-        // Physics parameters
-        const physicsFolder = gui.addFolder('◉ PHYSICS CONTROLS');
-        physicsFolder.add(this.config, 'gravityStrength', 0, 1).name('GRAVITY STRENGTH');
-        physicsFolder.add(this.config, 'lensingStrength', 0, 2).name('LENSING STRENGTH');
-        physicsFolder.add(this.config, 'velocityDamping', 0.9, 1).step(0.0001).name('FRICTION');
-        physicsFolder.add(this.config, 'initialSpeed', 0, 5).name('PARTICLE SPEED');
-        physicsFolder.add(this.config, 'particleSpread', 50, 800).name('SPREAD RADIUS').onChange(() => this.resetParticles());
-        physicsFolder.add(this.config, 'showLensingEffect').name('ENABLE LENSING');
-        physicsFolder.open();
-        
-        // Prism controls
-        const prismFolder = gui.addFolder('◉ PRISM CONTROLS');
-        prismFolder.add(this.config, 'prismEffect').name('ENABLE PRISM');
-        prismFolder.add(this.config, 'prismRadius', 50, 300).name('PRISM SIZE').onChange(() => {
-            // Recreate the prism and ring with new radius
-            this.updatePrismGeometry();
-        });
-        prismFolder.add(this.config, 'prismStrength', 0.1, 2.0).name('PRISM STRENGTH');
-        prismFolder.add(this.config, 'prismDispersion', 0.2, 3.0).name('COLOR DISPERSION');
-        prismFolder.add(this.config, 'prismOpacity', 0, 0.3).name('PRISM OPACITY').onChange(value => {
-            if (this.prismMesh) {
-                this.prismMesh.material.opacity = value;
-            }
-        });
-        prismFolder.add(this.config, 'ringOpacity', 0, 1).name('RING OPACITY').onChange(value => {
-            if (this.ringMesh) {
-                this.ringMesh.material.opacity = value;
-            }
-        });
-        prismFolder.open();
-        
-        // Actions
+        // Reset button
         gui.add(this.config, 'resetSimulation').name('⟲ RESET SIMULATION');
         
         // Add keyboard controls
@@ -585,21 +705,17 @@ class ParticleGravitySimulator {
                 gui.closed ? gui.open() : gui.close();
             }
             
-            // Toggle lens strength with L key
-            if (e.key.toLowerCase() === 'l') {
-                this.config.lensingStrength = this.config.lensingStrength > 0 ? 0 : 2.0;
-                // Update GUI controllers
-                for (let i in physicsFolder.__controllers) {
-                    physicsFolder.__controllers[i].updateDisplay();
-                }
+            // Launch a firework with spacebar
+            if (e.key === ' ' || e.key === 'Enter') {
+                this.launchFirework();
             }
             
-            // Toggle black hole strength with B key
-            if (e.key.toLowerCase() === 'b') {
-                this.config.gravityStrength = this.config.gravityStrength > 0 ? 0 : 1.0;
+            // Toggle auto-launch with A key
+            if (e.key.toLowerCase() === 'a') {
+                this.config.autoLaunch = !this.config.autoLaunch;
                 // Update GUI controllers
-                for (let i in physicsFolder.__controllers) {
-                    physicsFolder.__controllers[i].updateDisplay();
+                for (let i in fireworkFolder.__controllers) {
+                    fireworkFolder.__controllers[i].updateDisplay();
                 }
             }
         });
@@ -611,14 +727,6 @@ class ParticleGravitySimulator {
         // Update particle physics
         this.updateParticlePhysics();
         
-        // Update particle colors
-        this.updateParticleColors();
-        
-        // Rotate the rainbow ring for animated effect
-        if (this.ringMesh) {
-            this.ringMesh.rotation.z += 0.005;
-        }
-        
         // Render the scene
         this.renderer.render(this.scene, this.camera);
     }
@@ -626,5 +734,5 @@ class ParticleGravitySimulator {
 
 // Initialize the simulation when the document is loaded
 document.addEventListener('DOMContentLoaded', () => {
-    const simulator = new ParticleGravitySimulator();
+    const simulator = new FireworksSimulator();
 });

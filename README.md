@@ -1,6 +1,14 @@
-# Gravitational Lensing
+# Fireworks Designer
 
-Particle gravity simulation with gravitational lensing effects using Three.js.
+Interactive fireworks simulation with chemical reactions and particle effects using Three.js.
+
+## Features
+
+- Launch fireworks by clicking or automatically
+- Multiple firework patterns (spherical, heart, star, ring, spiral)
+- Chemical reactions between particles with realistic effects
+- Customizable physics and visual properties
+- Particle trails with color effects
 
 ## Run Locally
 
@@ -13,3 +21,10 @@ bun --hot server index.html
 ```
 
 Then visit http://localhost:3000
+
+## Controls
+
+- Click on screen to launch fireworks
+- Press Space to launch a random firework
+- Press A to toggle auto-launch
+- Press X to toggle UI controls
