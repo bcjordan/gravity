@@ -17,7 +17,7 @@ class ParticleGravitySimulator {
             particleColor: '#ffffff', // White light base color (not used with random colors)
             particleOpacity: 0.61,
             gravityStrength: 1.0,
-            lensingStrength: 0.0,
+            lensingStrength: 2.0,
             velocityDamping: 0.99,
             initialSpeed: 5.0,
             particleSpread: 800,
