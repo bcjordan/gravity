@@ -1,0 +1,149 @@
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    overflow: hidden;
+    background-color: #000;
+    font-family: 'Orbitron', sans-serif;
+}
+
+#container {
+    position: fixed;
+    width: 100%;
+    height: 100%;
+}
+
+canvas {
+    display: block;
+    width: 100%;
+    height: 100%;
+}
+
+/* Styling for dat.GUI */
+.dg.ac {
+    z-index: 1000 !important;
+}
+
+.dg .property-name {
+    width: 65% !important;
+    font-family: 'Orbitron', sans-serif !important;
+    font-weight: bold !important;
+    text-shadow: 0 0 5px #00ffff !important;
+    color: #fff !important;
+    padding-left: 8px !important;
+}
+
+.dg .c {
+    width: 35% !important;
+}
+
+.dg.main {
+    text-shadow: 0 0 3px cyan !important;
+    margin-right: 20px !important;
+    border-radius: 6px !important;
+    overflow: hidden !important;
+    box-shadow: 0 0 15px rgba(0, 255, 255, 0.3) !important;
+}
+
+.dg.main .close-button {
+    background-color: rgba(0, 0, 0, 0.5) !important;
+    border: 1px solid rgba(0, 255, 255, 0.5) !important;
+    border-radius: 0 !important;
+    line-height: 20px !important;
+    margin-top: 2px !important;
+}
+
+.dg li:not(.folder) {
+    background: rgba(0, 0, 0, 0.8) !important;
+    border-bottom: 1px solid rgba(0, 100, 150, 0.2) !important;
+    margin-bottom: 1px !important;
+    transition: background 0.2s !important;
+}
+
+.dg li:not(.folder):hover {
+    background: rgba(0, 50, 80, 0.8) !important;
+}
+
+.dg .cr.number input[type=text] {
+    color: #00ffff !important;
+    background: #000033 !important;
+}
+
+.dg .cr.boolean {
+    border-left: 3px solid #ff00ff !important;
+}
+
+.dg .cr.function {
+    border-left: 3px solid #ff0000 !important;
+    background: linear-gradient(to right, rgba(50,0,0,0.8), rgba(0,0,0,0.8)) !important;
+}
+
+.dg .folder {
+    border-left: 4px solid cyan !important;
+    background: linear-gradient(to right, rgba(0,20,40,0.9), rgba(0,0,0,0.8)) !important;
+}
+
+/* Style for category headers (folder titles) */
+.dg .title {
+    font-family: 'Orbitron', sans-serif !important;
+    font-size: 12px !important;
+    font-weight: bold !important;
+    text-transform: uppercase !important;
+    letter-spacing: 1px !important;
+    color: white !important;
+    text-shadow: 0 0 8px cyan !important;
+    padding: 8px !important;
+}
+
+/* Key controls info */
+#key-info {
+    position: absolute;
+    bottom: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    color: #ffffff;
+    background-color: rgba(0, 0, 0, 0.5);
+    padding: 10px 20px;
+    border-radius: 20px;
+    font-size: 14px;
+    font-weight: normal;
+    text-align: center;
+    pointer-events: none;
+    letter-spacing: 1px;
+    box-shadow: 0 0 10px rgba(255, 255, 255, 0.2);
+}
+
+/* Title */
+#title {
+    position: absolute;
+    top: 20px;
+    width: 100%;
+    color: white;
+    font-size: 42px;
+    font-weight: bold;
+    text-align: center;
+    pointer-events: none;
+    text-shadow: 
+        0 0 5px #ff0000,
+        0 0 10px #ff7700,
+        0 0 15px #ffff00,
+        0 0 20px #00ff00,
+        0 0 25px #0000ff,
+        0 0 30px #8b00ff;
+    letter-spacing: 2px;
+    background: linear-gradient(90deg, 
+        #ff0000, #ff7f00, #ffff00, 
+        #00ff00, #0000ff, #4b0082, #8b00ff);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    animation: rainbow 10s linear infinite;
+}
+
+@keyframes rainbow {
+    0% { background-position: 0% 50%; }
+    100% { background-position: 200% 50%; }
+}
