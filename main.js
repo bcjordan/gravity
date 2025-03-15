@@ -5,11 +5,8 @@ class ParticleGravitySimulator {
     constructor() {
         this.particles = [];
         this.scene = null;
-        this.camera = null;
-        this.renderer = null;
-        this.particleSystem = null;
+        // Initialize mouse position tracking
         this.mousePosition = new THREE.Vector2(0, 0);
-        
         // Default configuration parameters with user's preferred settings
         this.config = {
             particleCount: 50000,
@@ -88,6 +85,27 @@ class ParticleGravitySimulator {
         window.addEventListener('mousemove', (event) => {
             this.mousePosition.x = (event.clientX / window.innerWidth) * 2 - 1;
             this.mousePosition.y = -(event.clientY / window.innerHeight) * 2 + 1;
+        });
+        
+        // Add touch event support for mobile devices
+        window.addEventListener('touchstart', (event) => {
+            event.preventDefault();
+            const touch = event.touches[0];
+            this.mousePosition.x = (touch.clientX / window.innerWidth) * 2 - 1;
+            this.mousePosition.y = -(touch.clientY / window.innerHeight) * 2 + 1;
+        });
+        
+        window.addEventListener('touchmove', (event) => {
+            event.preventDefault();
+            const touch = event.touches[0];
+            this.mousePosition.x = (touch.clientX / window.innerWidth) * 2 - 1;
+            this.mousePosition.y = -(touch.clientY / window.innerHeight) * 2 + 1;
+        });
+        
+        window.addEventListener('touchend', (event) => {
+            event.preventDefault();
+            // Not resetting mousePosition allows the gravitational lensing 
+            // to continue from the last touch position
         });
         
         // Initialize particles
