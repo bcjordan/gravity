@@ -549,7 +549,7 @@ class ParticleGravitySimulator {
         
         // Particle appearance
         const appearanceFolder = gui.addFolder('◉ PARTICLE SETTINGS');
-        appearanceFolder.add(this.config, 'particleCount', 100, 50000).step(100).name('PARTICLE COUNT').onChange(() => this.resetParticles());
+        appearanceFolder.add(this.config, 'particleCount', 100, 8000000).step(10000).name('PARTICLE COUNT').onChange(() => this.resetParticles());
         appearanceFolder.add(this.config, 'particleSize', 0.5, 8).name('PARTICLE SIZE').onChange(value => {
             this.particleSystem.material.size = value;
         });
