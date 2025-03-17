@@ -7,6 +7,9 @@ class ParticleGravitySimulator {
         this.scene = null;
         // Initialize mouse position tracking
         this.mousePosition = new THREE.Vector2(0, 0);
+        // Store multiplayer gravity points
+        this.multiplayerGravityPoints = {};
+        this.myPlayerId = null;
         // Default configuration parameters with user's preferred settings
         this.config = {
             particleCount: 50000,
@@ -36,6 +39,147 @@ class ParticleGravitySimulator {
         this.init();
         this.setupGUI();
         this.animate();
+        
+        // Connect to multiplayer if available
+        if (window.multiplayerClient) {
+            window.multiplayerClient.setSimulator(this);
+        }
+    }
+    
+    // Update gravity points from multiplayer
+    updateMultiplayerGravityPoints(points, myPlayerId) {
+        this.multiplayerGravityPoints = points;
+        this.myPlayerId = myPlayerId;
+        
+        // Update prism meshes for all players
+        this.updateMultiplayerPrisms();
+    }
+    
+    // Create or update prism meshes for all players
+    updateMultiplayerPrisms() {
+        // Remove any existing multiplayer prisms
+        if (this.playerPrisms) {
+            for (const id in this.playerPrisms) {
+                if (this.playerPrisms[id].prismMesh) {
+                    this.scene.remove(this.playerPrisms[id].prismMesh);
+                    this.playerPrisms[id].prismMesh.geometry.dispose();
+                    this.playerPrisms[id].prismMesh.material.dispose();
+                }
+                if (this.playerPrisms[id].ringMesh) {
+                    this.scene.remove(this.playerPrisms[id].ringMesh);
+                    this.playerPrisms[id].ringMesh.geometry.dispose();
+                    this.playerPrisms[id].ringMesh.material.dispose();
+                }
+            }
+        }
+        
+        // Create new object to store player prisms
+        this.playerPrisms = {};
+        
+        // Create prisms for all players except self (self uses the main prism)
+        for (const id in this.multiplayerGravityPoints) {
+            if (id == this.myPlayerId) continue; // Skip self
+            
+            const params = this.multiplayerGravityPoints[id];
+            this.createPlayerPrism(id, params);
+        }
+    }
+    
+    // Create a prism for a specific player
+    createPlayerPrism(playerId, params) {
+        // Use default parameters if not provided
+        const radius = params.prismRadius || this.config.prismRadius;
+        const opacity = this.config.prismOpacity * 1.5; // Make other players' prisms more visible
+        const ringOpacity = this.config.ringOpacity * 1.5;
+        
+        // Create prism geometry
+        const prismGeometry = new THREE.CircleGeometry(radius, 64);
+        const prismMaterial = new THREE.MeshBasicMaterial({
+            color: 0x000000,
+            transparent: true,
+            opacity: opacity,
+            side: THREE.DoubleSide
+        });
+        
+        // Add a colorful ring to show the prism boundary
+        const ringGeometry = new THREE.RingGeometry(
+            radius - 1.5, 
+            radius, 
+            64
+        );
+        
+        // Create a gradient texture for the ring
+        const ringCanvas = document.createElement('canvas');
+        ringCanvas.width = 128;
+        ringCanvas.height = 2;
+        const ctx = ringCanvas.getContext('2d');
+        const ringGradient = ctx.createLinearGradient(0, 0, ringCanvas.width, 0);
+        
+        // Random hue for each player's ring - consistent based on player ID
+        const hueOffset = (parseInt(playerId) * 0.37) % 1.0;
+        
+        // Rainbow gradient, offset by player-specific hue
+        ringGradient.addColorStop(0, this.hslToHex((0.0 + hueOffset) % 1, 1, 0.5));
+        ringGradient.addColorStop(1/6, this.hslToHex((0.05 + hueOffset) % 1, 1, 0.5));
+        ringGradient.addColorStop(2/6, this.hslToHex((0.2 + hueOffset) % 1, 1, 0.5));
+        ringGradient.addColorStop(3/6, this.hslToHex((0.3 + hueOffset) % 1, 1, 0.5));
+        ringGradient.addColorStop(4/6, this.hslToHex((0.54 + hueOffset) % 1, 1, 0.5));
+        ringGradient.addColorStop(5/6, this.hslToHex((0.75 + hueOffset) % 1, 1, 0.5));
+        ringGradient.addColorStop(1, this.hslToHex((0.85 + hueOffset) % 1, 1, 0.5));
+        
+        ctx.fillStyle = ringGradient;
+        ctx.fillRect(0, 0, ringCanvas.width, ringCanvas.height);
+        
+        const rainbowTexture = new THREE.CanvasTexture(ringCanvas);
+        rainbowTexture.wrapS = THREE.RepeatWrapping;
+        
+        const ringMaterial = new THREE.MeshBasicMaterial({
+            map: rainbowTexture,
+            transparent: true,
+            opacity: ringOpacity,
+            side: THREE.DoubleSide
+        });
+        
+        // Create both prism circle and rainbow ring
+        const prismMesh = new THREE.Mesh(prismGeometry, prismMaterial);
+        this.scene.add(prismMesh);
+        
+        // Add the rainbow ring
+        const ringMesh = new THREE.Mesh(ringGeometry, ringMaterial);
+        this.scene.add(ringMesh);
+        
+        // Position prism at player's gravity point
+        if (params.position) {
+            prismMesh.position.set(params.position.x, params.position.y, 0);
+            ringMesh.position.set(params.position.x, params.position.y, 0);
+        }
+        
+        // Store meshes
+        this.playerPrisms[playerId] = {
+            prismMesh: prismMesh,
+            ringMesh: ringMesh,
+            params: params
+        };
+    }
+    
+    // Helper function to convert HSL to hex color
+    hslToHex(h, s, l) {
+        const toRGB = (p, q, t) => {
+            if (t < 0) t += 1;
+            if (t > 1) t -= 1;
+            if (t < 1/6) return p + (q - p) * 6 * t;
+            if (t < 1/2) return q;
+            if (t < 2/3) return p + (q - p) * (2/3 - t) * 6;
+            return p;
+        };
+        
+        const q = l < 0.5 ? l * (1 + s) : l + s - l * s;
+        const p = 2 * l - q;
+        const r = Math.round(toRGB(p, q, h + 1/3) * 255);
+        const g = Math.round(toRGB(p, q, h) * 255);
+        const b = Math.round(toRGB(p, q, h - 1/3) * 255);
+        
+        return `#${(1 << 24 | r << 16 | g << 8 | b).toString(16).slice(1)}`;
     }
     
     init() {
@@ -338,6 +482,22 @@ class ParticleGravitySimulator {
             0
         );
         
+        // Update player prism positions if they exist
+        if (this.playerPrisms) {
+            for (const id in this.playerPrisms) {
+                if (this.multiplayerGravityPoints[id] && this.multiplayerGravityPoints[id].position) {
+                    const pos = this.multiplayerGravityPoints[id].position;
+                    if (this.playerPrisms[id].prismMesh) {
+                        this.playerPrisms[id].prismMesh.position.set(pos.x, pos.y, 0);
+                    }
+                    if (this.playerPrisms[id].ringMesh) {
+                        this.playerPrisms[id].ringMesh.position.set(pos.x, pos.y, 0);
+                        this.playerPrisms[id].ringMesh.rotation.z += 0.01; // Rotate each player's ring
+                    }
+                }
+            }
+        }
+        
         for (let i = 0; i < this.config.particleCount; i++) {
             const i3 = i * 3;
             
@@ -361,7 +521,7 @@ class ParticleGravitySimulator {
                 }
             }
             
-            // Apply prism/lens effect in the center - DARK SIDE OF THE MOON
+            // Apply prism/lens effect for main player
             if (this.config.prismEffect) {
                 const toCenterX = -positions[i3];
                 const toCenterY = -positions[i3 + 1];
@@ -387,9 +547,6 @@ class ParticleGravitySimulator {
                         // Force increases as particles get closer to edge
                         const normalizedDist = centerDist / this.config.prismRadius;
                         dispersionForce = this.config.prismStrength * normalizedDist;
-                        
-                        // Keep original particle color inside prism
-                        // We're not changing colors inside, just when they exit
                     } else {
                         // Outside but near the prism - lensing effect
                         // Force decreases with distance from the edge
@@ -414,7 +571,6 @@ class ParticleGravitySimulator {
                         dominantForce = rForce * 0.5;
                         
                         // Add perpendicular "rainbow" motion for stronger separation
-                        // This creates a more dramatic spreading effect
                         const perpX = -dirY;
                         const perpY = dirX;
                         this.velocities[i3] += perpX * rForce * 0.3;
@@ -422,8 +578,6 @@ class ParticleGravitySimulator {
                     } else if (g > r * 1.5 && g > b * 1.5) {
                         // Strongly green dominant - medium bending
                         dominantForce = gForce * 0.8;
-                        
-                        // No perpendicular motion for green - straight path
                     } else if (b > r * 1.5 && b > g * 1.5) {
                         // Strongly blue dominant - much more bending
                         dominantForce = bForce * 1.8;
@@ -445,7 +599,95 @@ class ParticleGravitySimulator {
                 }
             }
             
-            // Create gravitational lensing effect around mouse position
+            // Apply prism/lens effects for each multiplayer gravity point
+            if (this.multiplayerGravityPoints) {
+                for (const id in this.multiplayerGravityPoints) {
+                    // Skip self (already handled by main prism)
+                    if (id == this.myPlayerId) continue;
+                    
+                    const params = this.multiplayerGravityPoints[id];
+                    if (!params.position) continue;
+                    
+                    // Vector from particle to gravity point
+                    const toPointX = params.position.x - positions[i3];
+                    const toPointY = params.position.y - positions[i3 + 1];
+                    const pointDist = Math.sqrt(toPointX * toPointX + toPointY * toPointY);
+                    
+                    if (pointDist < 0.1) continue; // Avoid division by zero
+                    
+                    // Gravity and prism parameters (use defaults if not provided)
+                    const gravityStrength = params.gravityStrength || this.config.gravityStrength;
+                    const lensingStrength = params.lensingStrength || this.config.lensingStrength;
+                    const prismRadius = params.prismRadius || this.config.prismRadius;
+                    const prismStrength = params.prismStrength || this.config.prismStrength;
+                    const prismDispersion = params.prismDispersion || this.config.prismDispersion;
+                    
+                    // Apply gravitational and lensing forces
+                    let gravityForce = 0;
+                    
+                    // Apply lensing force
+                    gravityForce = lensingStrength / Math.max(pointDist * 0.05, 0.1);
+                    
+                    // Add main gravity effect
+                    gravityForce += gravityStrength / Math.max(pointDist * 0.1, 0.5);
+                    
+                    // Normalize the direction vector
+                    const norm = 1 / pointDist;
+                    const dirX = toPointX * norm;
+                    const dirY = toPointY * norm;
+                    
+                    // Apply gravitational acceleration toward point
+                    this.velocities[i3] += dirX * gravityForce;
+                    this.velocities[i3 + 1] += dirY * gravityForce;
+                    
+                    // Apply prism effects for particles near the prism
+                    if (pointDist < prismRadius * 1.5) {
+                        // Get the particle's color components
+                        const r = colors[i3];
+                        const g = colors[i3 + 1];
+                        const b = colors[i3 + 2];
+                        
+                        let dispersionForce;
+                        
+                        if (pointDist < prismRadius) {
+                            // Inside the prism - dispersive force pushing outward
+                            const normalizedDist = pointDist / prismRadius;
+                            dispersionForce = prismStrength * normalizedDist;
+                        } else {
+                            // Outside but near - lensing effect
+                            const outsideDistance = pointDist - prismRadius;
+                            const falloff = Math.max(0, 1 - outsideDistance / (prismRadius * 0.5));
+                            dispersionForce = -prismStrength * 0.5 * falloff;
+                        }
+                        
+                        // Color-dependent dispersion
+                        const rForce = dispersionForce * (1.0 - prismDispersion * 0.6);
+                        const gForce = dispersionForce * 1.1;
+                        const bForce = dispersionForce * (1.0 + prismDispersion * 0.8);
+                        
+                        // Calculate dominant force based on color
+                        let dominantForce;
+                        const colorSum = r + g + b;
+                        
+                        if (r > g * 1.5 && r > b * 1.5) {
+                            dominantForce = rForce * 0.5;
+                        } else if (g > r * 1.5 && g > b * 1.5) {
+                            dominantForce = gForce * 0.8;
+                        } else if (b > r * 1.5 && b > g * 1.5) {
+                            dominantForce = bForce * 1.8;
+                        } else {
+                            dominantForce = (r * rForce + g * gForce + b * bForce) / Math.max(0.1, colorSum);
+                        }
+                        
+                        // Apply force with jitter
+                        const jitter = (Math.random() * 0.3 - 0.15) * dispersionForce;
+                        this.velocities[i3] -= dirX * (dominantForce + jitter);
+                        this.velocities[i3 + 1] -= dirY * (dominantForce + jitter);
+                    }
+                }
+            }
+            
+            // Create gravitational lensing effect around mouse position (local player)
             // Mouse creates a gravitational well that bends particle paths
             const toMouseX = mouseWorld.x - positions[i3];
             const toMouseY = mouseWorld.y - positions[i3 + 1];

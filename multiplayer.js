@@ -4,8 +4,77 @@ class MultiplayerClient {
         this.playerId = null;
         this.socket = null;
         this.playerList = document.getElementById('player-list');
+        this.gravityPoints = {};
+        this.simulator = null;
         
         this.connect();
+    }
+    
+    setSimulator(simulator) {
+        this.simulator = simulator;
+        
+        // Set up mouse tracking to send updates
+        window.addEventListener('mousemove', this.handleMouseMove.bind(this));
+        window.addEventListener('touchmove', this.handleTouchMove.bind(this));
+    }
+    
+    handleMouseMove(event) {
+        if (!this.socket || !this.playerId || !this.simulator) return;
+        
+        // Convert screen coordinates to normalized coordinates (-1 to 1)
+        const normalized = {
+            x: (event.clientX / window.innerWidth) * 2 - 1,
+            y: -(event.clientY / window.innerHeight) * 2 + 1
+        };
+        
+        // Convert normalized to world space
+        const worldPos = {
+            x: normalized.x * 400,
+            y: normalized.y * 400
+        };
+        
+        // Send position update to server
+        this.sendPositionUpdate(worldPos);
+    }
+    
+    handleTouchMove(event) {
+        if (!this.socket || !this.playerId || !this.simulator) return;
+        event.preventDefault();
+        
+        const touch = event.touches[0];
+        
+        // Convert screen coordinates to normalized coordinates (-1 to 1)
+        const normalized = {
+            x: (touch.clientX / window.innerWidth) * 2 - 1,
+            y: -(touch.clientY / window.innerHeight) * 2 + 1
+        };
+        
+        // Convert normalized to world space
+        const worldPos = {
+            x: normalized.x * 400,
+            y: normalized.y * 400
+        };
+        
+        // Send position update to server
+        this.sendPositionUpdate(worldPos);
+    }
+    
+    sendPositionUpdate(position) {
+        if (this.socket.readyState === WebSocket.OPEN) {
+            this.socket.send(JSON.stringify({
+                type: 'updatePosition',
+                position: position
+            }));
+        }
+    }
+    
+    sendParamsUpdate(params) {
+        if (this.socket.readyState === WebSocket.OPEN) {
+            this.socket.send(JSON.stringify({
+                type: 'updateParams',
+                params: params
+            }));
+        }
     }
     
     connect() {
@@ -47,6 +116,10 @@ class MultiplayerClient {
                     this.updatePlayerList(data.players);
                     break;
                     
+                case 'allGravityPoints':
+                    this.updateGravityPoints(data.points);
+                    break;
+                    
                 default:
                     console.log('Unknown message type:', data);
             }
@@ -83,6 +156,15 @@ class MultiplayerClient {
             
             this.playerList.appendChild(playerElement);
         });
+    }
+    
+    updateGravityPoints(points) {
+        this.gravityPoints = points;
+        
+        // If we have a simulator reference, update its external gravity points
+        if (this.simulator) {
+            this.simulator.updateMultiplayerGravityPoints(points, this.playerId);
+        }
     }
     
     updateDisplay() {
