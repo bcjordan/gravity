@@ -4,6 +4,7 @@ let nextPlayerId = 1;
 // Create WebSocket server with HTTP server
 const server = Bun.serve({
     port: 3001,
+    hostname: "0.0.0.0",  // Make sure to listen on all interfaces
     fetch(req, server) {
         // Upgrade HTTP requests to WebSocket
         if (server.upgrade(req)) {
