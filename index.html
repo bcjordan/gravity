@@ -14,6 +14,13 @@
     <div id="container">
         <canvas id="canvas"></canvas>
         <div id="key-info">Press [X] to toggle UI, [L] for lensing, [B] for gravity</div>
+        
+        <!-- Multiplayer UI -->
+        <div id="multiplayer-container">
+            <div id="message-log"></div>
+            <div id="player-list"></div>
+            <input type="text" id="message-input" placeholder="Type /message to chat" />
+        </div>
     </div>
 
     <!-- Scripts -->
@@ -25,6 +32,7 @@
       }
     </script>
     <script src="https://cdn.jsdelivr.net/npm/dat.gui@0.7.9/build/dat.gui.min.js"></script>
+    <script src="multiplayer.js" type="module"></script>
     <script src="main.js" type="module"></script>
 </body>
 </html>

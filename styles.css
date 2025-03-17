@@ -147,3 +147,83 @@ canvas {
     0% { background-position: 0% 50%; }
     100% { background-position: 200% 50%; }
 }
+
+/* Multiplayer UI styles */
+#multiplayer-container {
+    position: absolute;
+    top: 20px;
+    right: 20px;
+    width: 300px;
+    background-color: rgba(0, 0, 0, 0.7);
+    border: 1px solid rgba(0, 255, 255, 0.5);
+    border-radius: 10px;
+    padding: 10px;
+    color: white;
+    font-family: 'Orbitron', sans-serif;
+    box-shadow: 0 0 15px rgba(0, 255, 255, 0.3);
+    z-index: 100;
+}
+
+#message-log {
+    height: 200px;
+    overflow-y: auto;
+    margin-bottom: 10px;
+    padding: 5px;
+    background-color: rgba(0, 0, 0, 0.5);
+    border-radius: 5px;
+    font-size: 12px;
+}
+
+#player-list {
+    margin-bottom: 10px;
+    padding: 5px;
+    background-color: rgba(0, 0, 0, 0.5);
+    border-radius: 5px;
+    font-size: 12px;
+}
+
+#message-input {
+    width: 100%;
+    padding: 8px;
+    background-color: rgba(0, 0, 0, 0.8);
+    border: 1px solid rgba(0, 255, 255, 0.5);
+    border-radius: 5px;
+    color: #00ffff;
+    font-family: 'Orbitron', sans-serif;
+    outline: none;
+}
+
+#message-input:focus {
+    border-color: #00ffff;
+    box-shadow: 0 0 8px rgba(0, 255, 255, 0.6);
+}
+
+.player-message {
+    margin-bottom: 5px;
+    padding: 3px 5px;
+    border-radius: 3px;
+}
+
+.system-message {
+    color: #ffff00;
+    font-style: italic;
+}
+
+.player-id {
+    font-weight: bold;
+    margin-right: 5px;
+}
+
+.current-player {
+    color: #00ffff;
+}
+
+.player-entry {
+    margin: 2px 0;
+    padding: 2px 4px;
+    border-radius: 3px;
+}
+
+.own-message {
+    background-color: rgba(0, 100, 100, 0.3);
+}
