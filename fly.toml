@@ -12,10 +12,18 @@ primary_region = "bos"
   processes = ["app"]
 
 [[services]]
-  protocol = "tcp"
+  http_checks = []
   internal_port = 3001
   processes = ["app"]
+  protocol = "tcp"
+  script_checks = []
   
   [[services.ports]]
+    handlers = ["http", "tls"]
     port = 3001
-    handlers = ["http"]
+    
+  [[services.tcp_checks]]
+    grace_period = "1s"
+    interval = "15s"
+    restart_limit = 0
+    timeout = "2s"
