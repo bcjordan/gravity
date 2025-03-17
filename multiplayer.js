@@ -3,12 +3,9 @@ class MultiplayerClient {
     constructor() {
         this.playerId = null;
         this.socket = null;
-        this.messageInput = document.getElementById('message-input');
-        this.messageLog = document.getElementById('message-log');
         this.playerList = document.getElementById('player-list');
         
         this.connect();
-        this.setupEventListeners();
     }
     
     connect() {
@@ -27,7 +24,7 @@ class MultiplayerClient {
     }
     
     onSocketOpen(event) {
-        this.addSystemMessage('Connected to server');
+        console.log('Connected to server');
     }
     
     onSocketMessage(event) {
@@ -37,15 +34,11 @@ class MultiplayerClient {
             switch (data.type) {
                 case 'id':
                     this.playerId = data.id;
-                    this.addSystemMessage(`You joined as Player ${this.playerId}`);
+                    this.updateDisplay();
                     break;
                     
                 case 'players':
                     this.updatePlayerList(data.players);
-                    break;
-                    
-                case 'allMessages':
-                    this.updateAllMessages(data.messages);
                     break;
                     
                 default:
@@ -57,7 +50,7 @@ class MultiplayerClient {
     }
     
     onSocketClose(event) {
-        this.addSystemMessage('Disconnected from server');
+        console.log('Disconnected from server');
         
         // Try to reconnect after 5 seconds
         setTimeout(() => {
@@ -67,21 +60,6 @@ class MultiplayerClient {
     
     onSocketError(error) {
         console.error('WebSocket error:', error);
-        this.addSystemMessage('Connection error occurred');
-    }
-    
-    sendMessage(text) {
-        if (this.socket && this.socket.readyState === WebSocket.OPEN && this.playerId) {
-            const message = {
-                type: 'message',
-                playerId: this.playerId,
-                text: text
-            };
-            
-            this.socket.send(JSON.stringify(message));
-        } else {
-            this.addSystemMessage('Cannot send message: not connected');
-        }
     }
     
     updatePlayerList(players) {
@@ -101,66 +79,9 @@ class MultiplayerClient {
         });
     }
     
-    updateAllMessages(messages) {
-        // Clear existing messages first
-        this.messageLog.innerHTML = '<h3>Messages</h3>';
-        
-        // Add all messages to the log
-        for (const playerId in messages) {
-            const messageText = messages[playerId];
-            this.addPlayerMessage(playerId, messageText);
-        }
-    }
-    
-    addPlayerMessage(playerId, text) {
-        const messageElement = document.createElement('div');
-        messageElement.classList.add('player-message');
-        
-        const playerSpan = document.createElement('span');
-        playerSpan.classList.add('player-id');
-        playerSpan.textContent = `Player ${playerId}:`;
-        
-        if (playerId == this.playerId) {
-            playerSpan.classList.add('current-player');
-            messageElement.classList.add('own-message');
-        }
-        
-        messageElement.appendChild(playerSpan);
-        messageElement.appendChild(document.createTextNode(' ' + text));
-        
-        this.messageLog.appendChild(messageElement);
-        this.scrollToBottom();
-    }
-    
-    addSystemMessage(text) {
-        const messageElement = document.createElement('div');
-        messageElement.classList.add('system-message');
-        messageElement.textContent = text;
-        
-        this.messageLog.appendChild(messageElement);
-        this.scrollToBottom();
-    }
-    
-    scrollToBottom() {
-        this.messageLog.scrollTop = this.messageLog.scrollHeight;
-    }
-    
-    setupEventListeners() {
-        // Handle message input
-        this.messageInput.addEventListener('keypress', (event) => {
-            if (event.key === 'Enter') {
-                const text = this.messageInput.value.trim();
-                
-                if (text.startsWith('/')) {
-                    // Remove the slash and send the message
-                    const messageText = text.slice(1);
-                    if (messageText) {
-                        this.sendMessage(messageText);
-                        this.messageInput.value = '';
-                    }
-                }
-            }
-        });
+    updateDisplay() {
+        // You could update any additional UI elements here
+        document.getElementById('multiplayer-container').classList.add('connected');
     }
 }
 

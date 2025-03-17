@@ -153,7 +153,7 @@ canvas {
     position: absolute;
     top: 20px;
     right: 20px;
-    width: 300px;
+    width: 200px;
     background-color: rgba(0, 0, 0, 0.7);
     border: 1px solid rgba(0, 255, 255, 0.5);
     border-radius: 10px;
@@ -164,54 +164,19 @@ canvas {
     z-index: 100;
 }
 
-#message-log {
-    height: 200px;
-    overflow-y: auto;
-    margin-bottom: 10px;
-    padding: 5px;
-    background-color: rgba(0, 0, 0, 0.5);
-    border-radius: 5px;
-    font-size: 12px;
-}
-
 #player-list {
-    margin-bottom: 10px;
     padding: 5px;
     background-color: rgba(0, 0, 0, 0.5);
     border-radius: 5px;
     font-size: 12px;
 }
 
-#message-input {
-    width: 100%;
-    padding: 8px;
-    background-color: rgba(0, 0, 0, 0.8);
-    border: 1px solid rgba(0, 255, 255, 0.5);
-    border-radius: 5px;
+#player-list h3 {
+    text-align: center;
+    margin-bottom: 8px;
+    font-size: 14px;
     color: #00ffff;
-    font-family: 'Orbitron', sans-serif;
-    outline: none;
-}
-
-#message-input:focus {
-    border-color: #00ffff;
-    box-shadow: 0 0 8px rgba(0, 255, 255, 0.6);
-}
-
-.player-message {
-    margin-bottom: 5px;
-    padding: 3px 5px;
-    border-radius: 3px;
-}
-
-.system-message {
-    color: #ffff00;
-    font-style: italic;
-}
-
-.player-id {
-    font-weight: bold;
-    margin-right: 5px;
+    text-shadow: 0 0 5px rgba(0, 255, 255, 0.5);
 }
 
 .current-player {
@@ -219,11 +184,8 @@ canvas {
 }
 
 .player-entry {
-    margin: 2px 0;
-    padding: 2px 4px;
+    margin: 4px 0;
+    padding: 4px 8px;
     border-radius: 3px;
-}
-
-.own-message {
-    background-color: rgba(0, 100, 100, 0.3);
+    background-color: rgba(0, 20, 40, 0.3);
 }
