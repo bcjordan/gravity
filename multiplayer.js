@@ -1,17 +1,60 @@
-// Multiplayer WebSocket Client
+// Multiplayer WebSocket Client with server-authoritative physics
 class MultiplayerClient {
     constructor() {
         this.playerId = null;
         this.socket = null;
         this.playerList = document.getElementById('player-list');
-        this.gravityPoints = {};
+        this.players = {};
         this.simulator = null;
         
+        // Server simulation state
+        this.serverParticles = [];
+        this.receivedServerState = false;
+        this.interpolationBuffer = [];
+        this.serverTime = 0;
+        
         this.connect();
+        
+        // Add toggle for server physics
+        this.addServerPhysicsToggle();
+    }
+    
+    addServerPhysicsToggle() {
+        // Create toggle element
+        const toggleContainer = document.createElement('div');
+        toggleContainer.className = 'physics-toggle';
+        
+        const toggle = document.createElement('input');
+        toggle.type = 'checkbox';
+        toggle.id = 'server-physics-toggle';
+        toggle.checked = true; // Start with server physics enabled
+        
+        const label = document.createElement('label');
+        label.htmlFor = 'server-physics-toggle';
+        label.textContent = 'Server Physics';
+        
+        toggleContainer.appendChild(toggle);
+        toggleContainer.appendChild(label);
+        
+        // Add to the multiplayer container
+        document.getElementById('multiplayer-container').appendChild(toggleContainer);
+        
+        // Set up event listener
+        toggle.addEventListener('change', (e) => {
+            const useServerPhysics = e.target.checked;
+            
+            if (this.simulator) {
+                this.simulator.setUseServerPhysics(useServerPhysics);
+            }
+        });
     }
     
     setSimulator(simulator) {
         this.simulator = simulator;
+        
+        // Set initial server physics state
+        const useServerPhysics = document.getElementById('server-physics-toggle').checked;
+        this.simulator.setUseServerPhysics(useServerPhysics);
         
         // Set up mouse tracking to send updates
         window.addEventListener('mousemove', this.handleMouseMove.bind(this));
@@ -116,8 +159,53 @@ class MultiplayerClient {
                     this.updatePlayerList(data.players);
                     break;
                     
-                case 'allGravityPoints':
-                    this.updateGravityPoints(data.points);
+                case 'playerUpdate':
+                    this.updatePlayer(data.playerId, data.data);
+                    break;
+                    
+                case 'particleUpdate':
+                    // Store the server particles for rendering
+                    this.serverParticles = data.particles;
+                    this.serverTime = data.time;
+                    this.receivedServerState = true;
+                    
+                    // Add to interpolation buffer
+                    this.interpolationBuffer.push({
+                        particles: data.particles,
+                        time: data.time,
+                        timestamp: Date.now()
+                    });
+                    
+                    // Limit buffer size
+                    if (this.interpolationBuffer.length > 5) {
+                        this.interpolationBuffer.shift();
+                    }
+                    
+                    // Update client display
+                    if (this.simulator) {
+                        this.simulator.updateServerParticles(this.serverParticles);
+                    }
+                    break;
+                    
+                case 'fullState':
+                    // Handle full state update
+                    this.serverParticles = data.state.particles;
+                    this.players = data.state.players;
+                    this.serverTime = data.state.simulationTime;
+                    this.receivedServerState = true;
+                    
+                    // Clear interpolation buffer and add new state
+                    this.interpolationBuffer = [{
+                        particles: data.state.particles,
+                        time: data.state.simulationTime,
+                        timestamp: Date.now()
+                    }];
+                    
+                    // Update the client display
+                    if (this.simulator) {
+                        this.simulator.updateServerParticles(this.serverParticles);
+                        this.simulator.updateMultiplayerGravityPoints(this.players, this.playerId);
+                    }
                     break;
                     
                 default:
@@ -158,18 +246,65 @@ class MultiplayerClient {
         });
     }
     
-    updateGravityPoints(points) {
-        this.gravityPoints = points;
-        
-        // If we have a simulator reference, update its external gravity points
-        if (this.simulator) {
-            this.simulator.updateMultiplayerGravityPoints(points, this.playerId);
+    updatePlayer(playerId, data) {
+        // Update player data
+        if (!this.players[playerId]) {
+            this.players[playerId] = {};
         }
+        
+        // Update with new data
+        Object.assign(this.players[playerId], data);
+        
+        // Update simulator if available
+        if (this.simulator) {
+            this.simulator.updateMultiplayerGravityPoints(this.players, this.playerId);
+        }
+    }
+    
+    getInterpolatedParticles() {
+        if (this.interpolationBuffer.length < 2) {
+            return this.serverParticles;
+        }
+        
+        const now = Date.now();
+        const targetTime = now - 50; // Interpolate 50ms behind for smoothness
+        
+        // Find the two states to interpolate between
+        let state1 = this.interpolationBuffer[0];
+        let state2 = this.interpolationBuffer[1];
+        
+        for (let i = 1; i < this.interpolationBuffer.length; i++) {
+            if (this.interpolationBuffer[i].timestamp > targetTime) {
+                state1 = this.interpolationBuffer[i - 1];
+                state2 = this.interpolationBuffer[i];
+                break;
+            }
+        }
+        
+        // Calculate interpolation factor (0 to 1)
+        const timeDiff = state2.timestamp - state1.timestamp;
+        if (timeDiff <= 0) return state2.particles;
+        
+        const factor = Math.max(0, Math.min(1, (targetTime - state1.timestamp) / timeDiff));
+        
+        // Interpolate between states
+        return state1.particles.map((p1, index) => {
+            const p2 = state2.particles[index];
+            return {
+                x: p1.x + (p2.x - p1.x) * factor,
+                y: p1.y + (p2.y - p1.y) * factor
+            };
+        });
     }
     
     updateDisplay() {
         // You could update any additional UI elements here
         document.getElementById('multiplayer-container').classList.add('connected');
+    }
+    
+    // Check if we've received any server state yet
+    hasReceivedServerState() {
+        return this.receivedServerState;
     }
 }
 

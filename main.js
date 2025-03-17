@@ -10,6 +10,12 @@ class ParticleGravitySimulator {
         // Store multiplayer gravity points
         this.multiplayerGravityPoints = {};
         this.myPlayerId = null;
+        
+        // Server-side physics
+        this.useServerPhysics = true;
+        this.serverParticles = [];
+        this.serverParticlesMesh = null;
+        
         // Default configuration parameters with user's preferred settings
         this.config = {
             particleCount: 50000,
@@ -44,6 +50,118 @@ class ParticleGravitySimulator {
         if (window.multiplayerClient) {
             window.multiplayerClient.setSimulator(this);
         }
+    }
+    
+    // Set whether to use server-side physics
+    setUseServerPhysics(useServer) {
+        this.useServerPhysics = useServer;
+        
+        // Show/hide appropriate particle systems
+        if (this.serverParticlesMesh) {
+            this.serverParticlesMesh.visible = useServer;
+        }
+        if (this.particleSystem) {
+            this.particleSystem.visible = !useServer;
+        }
+        
+        console.log(`Using ${useServer ? 'server' : 'client'}-side physics`);
+    }
+    
+    // Update particles from server
+    updateServerParticles(particles) {
+        this.serverParticles = particles;
+        
+        // If server particles mesh doesn't exist yet, create it
+        if (!this.serverParticlesMesh && particles.length > 0) {
+            this.createServerParticlesMesh();
+        }
+        
+        // Update positions if mesh exists
+        if (this.serverParticlesMesh) {
+            const positions = this.serverParticlesMesh.geometry.attributes.position.array;
+            
+            // Update positions from server data
+            for (let i = 0; i < particles.length; i++) {
+                const i3 = i * 3;
+                if (i3 + 2 < positions.length) {
+                    positions[i3] = particles[i].x;
+                    positions[i3 + 1] = particles[i].y;
+                    positions[i3 + 2] = 0; // Keep z at 0
+                }
+            }
+            
+            // Mark for update
+            this.serverParticlesMesh.geometry.attributes.position.needsUpdate = true;
+        }
+    }
+    
+    // Create mesh for server particles
+    createServerParticlesMesh() {
+        // Create particle geometry
+        const geometry = new THREE.BufferGeometry();
+        const particleCount = this.serverParticles.length;
+        
+        const positions = new Float32Array(particleCount * 3);
+        const colors = new Float32Array(particleCount * 3);
+        
+        // Initialize positions from server data
+        for (let i = 0; i < particleCount; i++) {
+            const i3 = i * 3;
+            
+            // Set positions
+            positions[i3] = this.serverParticles[i].x;
+            positions[i3 + 1] = this.serverParticles[i].y;
+            positions[i3 + 2] = 0;
+            
+            // Create similar color patterns as client particles
+            const color = new THREE.Color();
+            const hue = Math.random(); // Random hue
+            const saturation = 1.0;    // Full saturation
+            const lightness = 0.5;     // Medium lightness
+            
+            color.setHSL(hue, saturation, lightness);
+            
+            colors[i3] = color.r;
+            colors[i3 + 1] = color.g;
+            colors[i3 + 2] = color.b;
+        }
+        
+        // Set attributes for the geometry
+        geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+        geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+        
+        // Create the same particle material as client particles
+        const canvas = document.createElement('canvas');
+        canvas.width = 32;
+        canvas.height = 32;
+        
+        const context = canvas.getContext('2d');
+        const gradient = context.createRadialGradient(16, 16, 0, 16, 16, 16);
+        gradient.addColorStop(0, 'rgba(255, 255, 255, 1)');
+        gradient.addColorStop(0.3, 'rgba(160, 255, 255, 0.8)');
+        gradient.addColorStop(0.7, 'rgba(80, 180, 255, 0.3)');
+        gradient.addColorStop(1, 'rgba(0, 0, 64, 0)');
+        
+        context.fillStyle = gradient;
+        context.fillRect(0, 0, 32, 32);
+        
+        const sprite = new THREE.CanvasTexture(canvas);
+        
+        const material = new THREE.PointsMaterial({
+            size: this.config.particleSize,
+            vertexColors: true,
+            transparent: true,
+            opacity: this.config.particleOpacity,
+            blending: THREE.AdditiveBlending,
+            sizeAttenuation: true,
+            depthWrite: false,
+            map: sprite
+        });
+        
+        // Create the particle system
+        this.serverParticlesMesh = new THREE.Points(geometry, material);
+        this.serverParticlesMesh.visible = this.useServerPhysics;
+        this.scene.add(this.serverParticlesMesh);
     }
     
     // Update gravity points from multiplayer
@@ -868,15 +986,27 @@ class ParticleGravitySimulator {
     animate() {
         requestAnimationFrame(() => this.animate());
         
-        // Update particle physics
-        this.updateParticlePhysics();
-        
-        // Update particle colors
-        this.updateParticleColors();
+        // Only run client-side physics if we're not using server physics
+        if (!this.useServerPhysics || !window.multiplayerClient || !window.multiplayerClient.hasReceivedServerState()) {
+            // Update particle physics
+            this.updateParticlePhysics();
+            
+            // Update particle colors
+            this.updateParticleColors();
+        }
         
         // Rotate the rainbow ring for animated effect
         if (this.ringMesh) {
             this.ringMesh.rotation.z += 0.005;
+        }
+        
+        // Rotate player rings if they exist
+        if (this.playerPrisms) {
+            for (const id in this.playerPrisms) {
+                if (this.playerPrisms[id].ringMesh) {
+                    this.playerPrisms[id].ringMesh.rotation.z += 0.005;
+                }
+            }
         }
         
         // Render the scene

@@ -189,3 +189,24 @@ canvas {
     border-radius: 3px;
     background-color: rgba(0, 20, 40, 0.3);
 }
+
+/* Server physics toggle */
+.physics-toggle {
+    margin-top: 10px;
+    padding: 5px;
+    background-color: rgba(0, 0, 0, 0.5);
+    border-radius: 5px;
+    font-size: 12px;
+    display: flex;
+    align-items: center;
+}
+
+.physics-toggle input[type="checkbox"] {
+    margin-right: 8px;
+    accent-color: #00ffff;
+}
+
+.physics-toggle label {
+    color: #00ffff;
+    cursor: pointer;
+}

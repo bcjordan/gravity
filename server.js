@@ -1,16 +1,23 @@
+import ServerPhysicsSimulation from './server-physics.js';
+
 // Store players and their gravity point data
 const players = {};
 let nextPlayerId = 1;
 
-// Default physics parameters for new players
-const defaultGravityParams = {
-    position: { x: 0, y: 0 },
+// Create the physics simulation
+const physicsSimulation = new ServerPhysicsSimulation({
+    particleCount: 2000,       // Reduced for server performance
+    updateRate: 20,            // Updates per second
     gravityStrength: 1.0,
-    lensingStrength: 1.5,
-    prismRadius: 50,
-    prismStrength: 1.0,
-    prismDispersion: 1.5
-};
+    particleSpread: 800
+});
+
+// Start the simulation
+physicsSimulation.startSimulation();
+
+// Track the last time we sent a full simulation update
+let lastFullUpdateTime = Date.now();
+const FULL_UPDATE_INTERVAL = 100; // Send full state every 100ms
 
 // Create WebSocket server with HTTP server
 const server = Bun.serve({
@@ -30,11 +37,13 @@ const server = Bun.serve({
             // Generate a random ID
             const playerId = nextPlayerId++;
             
-            // Store player with websocket and default gravity parameters
+            // Store player with websocket
             players[playerId] = {
-                ws: ws,
-                params: {...defaultGravityParams}
+                ws: ws
             };
+            
+            // Add player to physics simulation with default params
+            const playerParams = physicsSimulation.addPlayer(playerId);
             
             console.log(`Player ${playerId} connected`);
             
@@ -44,10 +53,10 @@ const server = Bun.serve({
                 id: playerId 
             }));
             
-            // Send current player gravity points to the new player
+            // Send current simulation state to the new player
             ws.send(JSON.stringify({
-                type: "allGravityPoints",
-                points: getAllGravityPoints()
+                type: "fullState",
+                state: physicsSimulation.getState()
             }));
             
             // Notify everyone about the new player
@@ -63,18 +72,29 @@ const server = Bun.serve({
                 if (!playerId) return;
                 
                 if (data.type === "updatePosition") {
-                    // Update player's gravity point position
-                    players[playerId].params.position = data.position;
+                    // Update player's gravity point position in the simulation
+                    physicsSimulation.updatePlayerPosition(playerId, data.position);
                     
-                    // Broadcast updated gravity points to all players
-                    broadcastGravityPoints();
+                    // Broadcast the position update to all other players
+                    broadcastPlayerUpdate(playerId, {
+                        position: data.position
+                    });
                 }
                 else if (data.type === "updateParams") {
-                    // Update player's gravity parameters
-                    Object.assign(players[playerId].params, data.params);
+                    // Update player's gravity parameters in the simulation
+                    physicsSimulation.updatePlayerParams(playerId, data.params);
                     
-                    // Broadcast updated gravity points to all players
-                    broadcastGravityPoints();
+                    // Broadcast the parameter update to all other players
+                    broadcastPlayerUpdate(playerId, data.params);
+                }
+                else if (data.type === "setParticleCount" && data.count) {
+                    // Admin command to change particle count
+                    console.log(`Player ${playerId} changing particle count to ${data.count}`);
+                    physicsSimulation.options.particleCount = Math.min(10000, Math.max(500, data.count));
+                    physicsSimulation.resetSimulation();
+                    
+                    // Broadcast system message about the change
+                    broadcastSystemMessage(`Particle count changed to ${physicsSimulation.options.particleCount}`);
                 }
             } catch (e) {
                 console.error("Error processing message:", e);
@@ -86,27 +106,51 @@ const server = Bun.serve({
             
             if (playerId) {
                 console.log(`Player ${playerId} disconnected`);
+                
+                // Remove from players object
                 delete players[playerId];
+                
+                // Remove from physics simulation
+                physicsSimulation.removePlayer(playerId);
                 
                 // Notify everyone about the player list change
                 broadcastPlayerList();
-                
-                // Broadcast updated gravity points to all players
-                broadcastGravityPoints();
             }
         }
     }
 });
 
-// Function to get all gravity points with player IDs
-function getAllGravityPoints() {
-    const points = {};
+// Function to broadcast a player update to all connected clients
+function broadcastPlayerUpdate(playerId, updateData) {
+    const message = JSON.stringify({
+        type: "playerUpdate",
+        playerId: playerId,
+        data: updateData
+    });
     
     for (const id in players) {
-        points[id] = players[id].params;
+        try {
+            players[id].ws.send(message);
+        } catch (e) {
+            console.error(`Error sending player update to ${id}:`, e);
+        }
     }
+}
+
+// Function to broadcast a system message to all clients
+function broadcastSystemMessage(text) {
+    const message = JSON.stringify({
+        type: "systemMessage",
+        text: text
+    });
     
-    return points;
+    for (const id in players) {
+        try {
+            players[id].ws.send(message);
+        } catch (e) {
+            console.error(`Error sending system message to ${id}:`, e);
+        }
+    }
 }
 
 // Broadcast the player list to all clients
@@ -126,21 +170,52 @@ function broadcastPlayerList() {
     }
 }
 
-// Broadcast all gravity points to all clients
-function broadcastGravityPoints() {
-    const points = getAllGravityPoints();
-    const message = JSON.stringify({
-        type: "allGravityPoints",
-        points: points
-    });
+// Start a periodic broadcast of simulation state
+setInterval(() => {
+    const now = Date.now();
     
-    for (const id in players) {
-        try {
-            players[id].ws.send(message);
-        } catch (e) {
-            console.error(`Error sending gravity points to player ${id}:`, e);
+    // Send partial update (just particle positions) most of the time
+    if (now - lastFullUpdateTime < FULL_UPDATE_INTERVAL) {
+        const simState = physicsSimulation.getState();
+        const message = JSON.stringify({
+            type: "particleUpdate",
+            particles: simState.particles, // Just send particle positions
+            time: simState.simulationTime
+        });
+        
+        for (const id in players) {
+            try {
+                players[id].ws.send(message);
+            } catch (e) {
+                console.error(`Error sending particle update to ${id}:`, e);
+            }
+        }
+    } 
+    // Send full update periodically
+    else {
+        lastFullUpdateTime = now;
+        const simState = physicsSimulation.getState();
+        const message = JSON.stringify({
+            type: "fullState",
+            state: simState
+        });
+        
+        for (const id in players) {
+            try {
+                players[id].ws.send(message);
+            } catch (e) {
+                console.error(`Error sending full state to ${id}:`, e);
+            }
         }
     }
-}
+}, 50); // Update clients at 20Hz
+
+// Handle process exit
+process.on('SIGINT', () => {
+    console.log('Stopping physics simulation...');
+    physicsSimulation.stopSimulation();
+    process.exit(0);
+});
 
 console.log(`Server running at http://localhost:${server.port}`);
+console.log(`Physics simulation started with ${physicsSimulation.particles.length} particles`);
