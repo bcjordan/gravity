@@ -13,10 +13,24 @@ class MultiplayerClient {
         this.interpolationBuffer = [];
         this.serverTime = 0;
         
+        // Performance metrics
+        this.perfMetrics = {
+            physicsTime: 0,
+            avgPhysicsTime: 0,
+            particleCount: 0,
+            playerCount: 0,
+            networkLatency: 0,
+            avgNetworkLatency: 0,
+            messageCount: 0
+        };
+        
         this.connect();
         
         // Add toggle for server physics
         this.addServerPhysicsToggle();
+        
+        // Add performance monitor UI
+        this.addPerformanceMonitor();
     }
     
     addServerPhysicsToggle() {
@@ -164,6 +178,9 @@ class MultiplayerClient {
                     break;
                     
                 case 'particleUpdate':
+                    // Calculate network latency
+                    const receiveTime = Date.now();
+                    
                     // Store the server particles for rendering
                     this.serverParticles = data.particles;
                     this.serverTime = data.time;
@@ -173,7 +190,7 @@ class MultiplayerClient {
                     this.interpolationBuffer.push({
                         particles: data.particles,
                         time: data.time,
-                        timestamp: Date.now()
+                        timestamp: receiveTime
                     });
                     
                     // Limit buffer size
@@ -185,9 +202,17 @@ class MultiplayerClient {
                     if (this.simulator) {
                         this.simulator.updateServerParticles(this.serverParticles);
                     }
+                    
+                    // Update performance metrics if provided
+                    if (data.metrics) {
+                        this.updatePerformanceMetrics(data.metrics, receiveTime);
+                    }
                     break;
                     
                 case 'fullState':
+                    // Calculate network latency
+                    const fullStateReceiveTime = Date.now();
+                    
                     // Handle full state update
                     this.serverParticles = data.state.particles;
                     this.players = data.state.players;
@@ -198,13 +223,18 @@ class MultiplayerClient {
                     this.interpolationBuffer = [{
                         particles: data.state.particles,
                         time: data.state.simulationTime,
-                        timestamp: Date.now()
+                        timestamp: fullStateReceiveTime
                     }];
                     
                     // Update the client display
                     if (this.simulator) {
                         this.simulator.updateServerParticles(this.serverParticles);
                         this.simulator.updateMultiplayerGravityPoints(this.players, this.playerId);
+                    }
+                    
+                    // Update performance metrics if provided
+                    if (data.metrics) {
+                        this.updatePerformanceMetrics(data.metrics, fullStateReceiveTime);
                     }
                     break;
                     
@@ -305,6 +335,68 @@ class MultiplayerClient {
     // Check if we've received any server state yet
     hasReceivedServerState() {
         return this.receivedServerState;
+    }
+    
+    // Add performance monitor UI element
+    addPerformanceMonitor() {
+        // Create container
+        const perfContainer = document.createElement('div');
+        perfContainer.className = 'perf-monitor';
+        perfContainer.id = 'perf-monitor';
+        perfContainer.innerHTML = `
+            <h3>Server Performance</h3>
+            <div class="metrics">
+                <div>Physics Time: <span id="physics-time">0.00</span> ms</div>
+                <div>Avg Physics: <span id="avg-physics">0.00</span> ms</div>
+                <div>Particles: <span id="particle-count">0</span></div>
+                <div>Players: <span id="player-count">0</span></div>
+                <div>Latency: <span id="network-latency">0</span> ms</div>
+            </div>
+        `;
+        
+        // Add to multiplayer container
+        document.getElementById('multiplayer-container').appendChild(perfContainer);
+        
+        // Update metrics every 500ms
+        setInterval(() => this.updatePerformanceDisplay(), 500);
+    }
+    
+    // Update performance display
+    updatePerformanceDisplay() {
+        if (!this.receivedServerState) return;
+        
+        // Update UI elements with current metrics
+        document.getElementById('physics-time').textContent = this.perfMetrics.physicsTime.toFixed(2);
+        document.getElementById('avg-physics').textContent = this.perfMetrics.avgPhysicsTime.toFixed(2);
+        document.getElementById('particle-count').textContent = this.perfMetrics.particleCount;
+        document.getElementById('player-count').textContent = this.perfMetrics.playerCount;
+        document.getElementById('network-latency').textContent = this.perfMetrics.networkLatency.toFixed(0);
+    }
+    
+    // Update performance metrics from server data
+    updatePerformanceMetrics(metrics, receiveTime) {
+        // Update server-side metrics
+        this.perfMetrics.physicsTime = metrics.physicsTime;
+        this.perfMetrics.avgPhysicsTime = metrics.avgPhysicsTime;
+        this.perfMetrics.particleCount = metrics.particleCount;
+        this.perfMetrics.playerCount = metrics.playerCount;
+        
+        // Calculate network latency (time between server sending and client receiving)
+        // We need to account for any clock offset between client and server
+        // For simplicity, we'll just use the transport time which is an approximation
+        const latency = Date.now() - receiveTime;
+        
+        // Update message count and network latency
+        this.perfMetrics.messageCount++;
+        this.perfMetrics.networkLatency = latency;
+        
+        // Update moving average of network latency
+        if (!this.perfMetrics.avgNetworkLatency) {
+            this.perfMetrics.avgNetworkLatency = latency;
+        } else {
+            this.perfMetrics.avgNetworkLatency = 
+                0.9 * this.perfMetrics.avgNetworkLatency + 0.1 * latency;
+        }
     }
 }
 

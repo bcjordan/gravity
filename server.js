@@ -173,9 +173,38 @@ function broadcastPlayerList() {
     }
 }
 
+// Track server performance metrics
+let lastPhysicsTime = 0;   // Time spent in last physics update
+let avgPhysicsTime = 0;    // Moving average of physics update time
+let updateCount = 0;       // Count of updates for averaging
+const avgWindow = 50;      // Window size for moving average
+
+// Add performance monitoring to the physics simulation
+const originalUpdatePhysics = physicsSimulation.updatePhysics;
+physicsSimulation.updatePhysics = function(deltaTime) {
+    const startTime = performance.now();
+    originalUpdatePhysics.call(this, deltaTime);
+    const endTime = performance.now();
+    
+    // Calculate time spent in physics update
+    lastPhysicsTime = endTime - startTime;
+    
+    // Update moving average
+    updateCount++;
+    avgPhysicsTime = avgPhysicsTime + (lastPhysicsTime - avgPhysicsTime) / Math.min(updateCount, avgWindow);
+};
+
 // Start a periodic broadcast of simulation state - slower updates (every 80ms or ~12 fps)
 setInterval(() => {
     const now = Date.now();
+    
+    // Gather performance metrics
+    const perfMetrics = {
+        physicsTime: lastPhysicsTime,       // Last single update time (ms)
+        avgPhysicsTime: avgPhysicsTime,     // Moving average update time (ms)
+        particleCount: physicsSimulation.particles.length,
+        playerCount: Object.keys(players).length
+    };
     
     // Send partial update (just particle positions) most of the time
     if (now - lastFullUpdateTime < FULL_UPDATE_INTERVAL) {
@@ -183,7 +212,8 @@ setInterval(() => {
         const message = JSON.stringify({
             type: "particleUpdate",
             particles: simState.particles, // Just send particle positions
-            time: simState.simulationTime
+            time: simState.simulationTime,
+            metrics: perfMetrics            // Include performance metrics
         });
         
         for (const id in players) {
@@ -200,7 +230,8 @@ setInterval(() => {
         const simState = physicsSimulation.getState();
         const message = JSON.stringify({
             type: "fullState",
-            state: simState
+            state: simState,
+            metrics: perfMetrics            // Include performance metrics
         });
         
         for (const id in players) {
