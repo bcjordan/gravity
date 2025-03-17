@@ -148,10 +148,10 @@ class ParticleGravitySimulator {
         const sprite = new THREE.CanvasTexture(canvas);
         
         const material = new THREE.PointsMaterial({
-            size: this.config.particleSize,
+            size: this.config.particleSize * 1.5, // 50% larger for server particles
             vertexColors: true,
             transparent: true,
-            opacity: this.config.particleOpacity,
+            opacity: this.config.particleOpacity * 1.2, // Slightly more opaque
             blending: THREE.AdditiveBlending,
             sizeAttenuation: true,
             depthWrite: false,

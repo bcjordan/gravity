@@ -31,7 +31,7 @@ class MultiplayerClient {
         
         const label = document.createElement('label');
         label.htmlFor = 'server-physics-toggle';
-        label.textContent = 'Server Physics';
+        label.textContent = 'Server Physics (Slower/Bigger)';
         
         toggleContainer.appendChild(toggle);
         toggleContainer.appendChild(label);

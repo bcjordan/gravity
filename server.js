@@ -6,10 +6,13 @@ let nextPlayerId = 1;
 
 // Create the physics simulation
 const physicsSimulation = new ServerPhysicsSimulation({
-    particleCount: 2000,       // Reduced for server performance
-    updateRate: 20,            // Updates per second
-    gravityStrength: 1.0,
-    particleSpread: 800
+    particleCount: 1000,       // Even fewer particles for clear visibility
+    updateRate: 15,            // Slower updates for easier visualization
+    gravityStrength: 2.0,      // Stronger gravity for more obvious effects
+    particleSpread: 800,
+    initialSpeed: 3.0,         // Slower initial speed
+    velocityDamping: 0.96,     // More damping for slower movement
+    prismRadius: 100           // Larger prism radius
 });
 
 // Start the simulation
@@ -17,7 +20,7 @@ physicsSimulation.startSimulation();
 
 // Track the last time we sent a full simulation update
 let lastFullUpdateTime = Date.now();
-const FULL_UPDATE_INTERVAL = 100; // Send full state every 100ms
+const FULL_UPDATE_INTERVAL = 200; // Send full state every 200ms
 
 // Create WebSocket server with HTTP server
 const server = Bun.serve({
@@ -170,7 +173,7 @@ function broadcastPlayerList() {
     }
 }
 
-// Start a periodic broadcast of simulation state
+// Start a periodic broadcast of simulation state - slower updates (every 80ms or ~12 fps)
 setInterval(() => {
     const now = Date.now();
     
@@ -208,7 +211,7 @@ setInterval(() => {
             }
         }
     }
-}, 50); // Update clients at 20Hz
+}, 80); // Update clients at ~12 Hz for slower, more visible movements
 
 // Handle process exit
 process.on('SIGINT', () => {

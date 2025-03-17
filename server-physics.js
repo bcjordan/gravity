@@ -75,12 +75,13 @@ class ServerPhysicsSimulation {
     }
     
     addPlayer(playerId, initialParams = {}) {
-        // Set default player gravity parameters
+        // Set default player gravity parameters with stronger effects
         this.players[playerId] = {
             position: initialParams.position || { x: 0, y: 0 },
-            gravityStrength: initialParams.gravityStrength || this.options.gravityStrength,
+            gravityStrength: initialParams.gravityStrength || this.options.gravityStrength * 1.5,
             prismRadius: initialParams.prismRadius || this.options.prismRadius,
-            lensingStrength: initialParams.lensingStrength || 1.0
+            lensingStrength: initialParams.lensingStrength || 3.0,   // Much stronger lensing
+            prismStrength: initialParams.prismStrength || 2.0        // Added prism strength
         };
         
         return this.players[playerId];
@@ -160,9 +161,11 @@ class ServerPhysicsSimulation {
                         let prismForce;
                         
                         if (playerDist < player.prismRadius) {
-                            // Inside prism - push outward
+                            // Inside prism - push outward with much stronger effect
                             const normalizedDist = playerDist / player.prismRadius;
-                            prismForce = 0.05 * normalizedDist * timeScale;
+                            // Use player's prismStrength if available
+                            const strength = player.prismStrength || 2.0;
+                            prismForce = 0.2 * normalizedDist * timeScale * strength;
                             
                             // Apply force against gravity direction
                             velocity.x -= toPlayerX * norm * prismForce;
