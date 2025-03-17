@@ -2,9 +2,9 @@
   "name": "gravitationallensing",
   "private": true,
   "scripts": {
-    "serve": "bun --hot index.html",
+    "serve": "bun --hot --hostname=0.0.0.0 index.html",
     "server": "bun run server.js",
-    "dev": "bun run server.js & bun --hot index.html"
+    "dev": "bun run server.js & bun --hot --hostname=0.0.0.0 index.html"
   },
   "devDependencies": {
     "@types/bun": "latest"

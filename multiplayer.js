@@ -11,7 +11,13 @@ class MultiplayerClient {
     connect() {
         // Use WebSocket protocol for client
         const host = window.location.hostname;
-        const wsUrl = `ws://${host}:3001`;
+        const protocol = window.location.protocol === 'https:' ? 'wss://' : 'ws://';
+        
+        // For local development use port 3001, for production use the same port as the page
+        const port = host === 'localhost' || host === '127.0.0.1' ? ':3001' : '';
+        const wsUrl = `${protocol}${host}${port}`;
+        
+        console.log(`Connecting to WebSocket at ${wsUrl}`);
         
         // Create WebSocket connection
         this.socket = new WebSocket(wsUrl);
