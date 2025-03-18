@@ -219,6 +219,7 @@ canvas {
     border: 1px solid rgba(0, 255, 255, 0.3);
     border-radius: 5px;
     font-size: 11px;
+    box-shadow: 0 0 10px rgba(0, 255, 255, 0.2);
 }
 
 .perf-monitor h3 {
@@ -227,21 +228,88 @@ canvas {
     text-align: center;
     font-size: 12px;
     color: #ffff00;
+    text-shadow: 0 0 5px rgba(255, 255, 0, 0.5);
 }
 
 .perf-monitor .metrics {
     display: grid;
     grid-template-columns: 1fr 1fr;
-    gap: 3px;
+    gap: 4px;
 }
 
 .perf-monitor .metrics div {
     background-color: rgba(0, 20, 40, 0.4);
-    padding: 2px 5px;
+    padding: 3px 5px;
     border-radius: 3px;
+    border: 1px solid rgba(0, 100, 150, 0.3);
+    transition: background-color 0.3s;
+}
+
+.perf-monitor .metrics div:hover {
+    background-color: rgba(0, 40, 70, 0.6);
 }
 
 .perf-monitor .metrics span {
     color: #00ffff;
     font-weight: bold;
+    float: right;
+    text-shadow: 0 0 3px rgba(0, 255, 255, 0.5);
+}
+
+/* Particle Control styles */
+.particle-control {
+    margin-top: 10px;
+    padding: 8px;
+    background-color: rgba(0, 0, 0, 0.7);
+    border: 1px solid rgba(0, 255, 255, 0.3);
+    border-radius: 5px;
+    font-size: 11px;
+    box-shadow: 0 0 10px rgba(0, 255, 255, 0.2);
+}
+
+.particle-control h3 {
+    margin: 0 0 5px 0;
+    padding: 0;
+    text-align: center;
+    font-size: 12px;
+    color: #ffff00;
+    text-shadow: 0 0 5px rgba(255, 255, 0, 0.5);
+}
+
+.particle-control .control-row {
+    display: flex;
+    align-items: center;
+    margin-bottom: 5px;
+}
+
+.particle-control input[type="range"] {
+    flex-grow: 1;
+    margin-right: 10px;
+    accent-color: #00ffff;
+    height: 6px;
+}
+
+.particle-control #particle-value {
+    color: #00ffff;
+    font-weight: bold;
+    width: 45px;
+    text-align: right;
+    text-shadow: 0 0 3px rgba(0, 255, 255, 0.5);
+}
+
+.particle-control button {
+    width: 100%;
+    padding: 4px;
+    background-color: rgba(0, 60, 100, 0.6);
+    border: 1px solid rgba(0, 150, 200, 0.5);
+    border-radius: 4px;
+    color: white;
+    font-family: 'Orbitron', sans-serif;
+    font-size: 11px;
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+
+.particle-control button:hover {
+    background-color: rgba(0, 80, 130, 0.8);
 }

@@ -99,6 +99,14 @@ const server = Bun.serve({
                     // Broadcast system message about the change
                     broadcastSystemMessage(`Particle count changed to ${physicsSimulation.options.particleCount}`);
                 }
+                else if (data.type === "ping") {
+                    // Respond to ping requests with pong message
+                    // Including the original client timestamp for RTT calculation
+                    ws.send(JSON.stringify({
+                        type: "pong",
+                        time: data.time
+                    }));
+                }
             } catch (e) {
                 console.error("Error processing message:", e);
             }

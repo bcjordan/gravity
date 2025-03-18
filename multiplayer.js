@@ -21,8 +21,15 @@ class MultiplayerClient {
             playerCount: 0,
             networkLatency: 0,
             avgNetworkLatency: 0,
-            messageCount: 0
+            messageCount: 0,
+            ping: 0,           // Round-trip ping time
+            avgPing: 0         // Average ping time
         };
+        
+        // Ping tracking
+        this.pingStart = 0;
+        this.pingInterval = null;
+        this.pingSamples = [];
         
         this.connect();
         
@@ -31,6 +38,9 @@ class MultiplayerClient {
         
         // Add performance monitor UI
         this.addPerformanceMonitor();
+        
+        // Add particle count control
+        this.addParticleControl();
     }
     
     addServerPhysicsToggle() {
@@ -157,6 +167,35 @@ class MultiplayerClient {
     
     onSocketOpen(event) {
         console.log('Connected to server');
+        
+        // Start pinging server for latency measurement
+        this.startPinging();
+    }
+    
+    // Start sending ping messages
+    startPinging() {
+        if (this.pingInterval) {
+            clearInterval(this.pingInterval);
+        }
+        
+        // Send ping every 2 seconds
+        this.pingInterval = setInterval(() => {
+            this.sendPing();
+        }, 2000);
+        
+        // Send first ping immediately
+        this.sendPing();
+    }
+    
+    // Send a ping message to server
+    sendPing() {
+        if (this.socket && this.socket.readyState === WebSocket.OPEN) {
+            this.pingStart = performance.now();
+            this.socket.send(JSON.stringify({
+                type: 'ping',
+                time: this.pingStart
+            }));
+        }
     }
     
     onSocketMessage(event) {
@@ -238,6 +277,31 @@ class MultiplayerClient {
                     }
                     break;
                     
+                case 'pong':
+                    // Calculate round-trip time
+                    const pongTime = performance.now();
+                    const pingTime = data.time;
+                    
+                    if (pingTime) {
+                        const roundTripTime = pongTime - pingTime;
+                        
+                        // Add to ping samples
+                        this.pingSamples.push(roundTripTime);
+                        
+                        // Keep only last 10 samples
+                        if (this.pingSamples.length > 10) {
+                            this.pingSamples.shift();
+                        }
+                        
+                        // Calculate average ping
+                        const avgPing = this.pingSamples.reduce((a, b) => a + b, 0) / this.pingSamples.length;
+                        
+                        // Update metrics
+                        this.perfMetrics.ping = Math.round(roundTripTime);
+                        this.perfMetrics.avgPing = Math.round(avgPing);
+                    }
+                    break;
+                    
                 default:
                     console.log('Unknown message type:', data);
             }
@@ -248,6 +312,12 @@ class MultiplayerClient {
     
     onSocketClose(event) {
         console.log('Disconnected from server');
+        
+        // Clear ping interval
+        if (this.pingInterval) {
+            clearInterval(this.pingInterval);
+            this.pingInterval = null;
+        }
         
         // Try to reconnect after 5 seconds
         setTimeout(() => {
@@ -350,7 +420,8 @@ class MultiplayerClient {
                 <div>Avg Physics: <span id="avg-physics">0.00</span> ms</div>
                 <div>Particles: <span id="particle-count">0</span></div>
                 <div>Players: <span id="player-count">0</span></div>
-                <div>Latency: <span id="network-latency">0</span> ms</div>
+                <div>Ping: <span id="ping">0</span> ms</div>
+                <div>Avg Ping: <span id="avg-ping">0</span> ms</div>
             </div>
         `;
         
@@ -370,7 +441,51 @@ class MultiplayerClient {
         document.getElementById('avg-physics').textContent = this.perfMetrics.avgPhysicsTime.toFixed(2);
         document.getElementById('particle-count').textContent = this.perfMetrics.particleCount;
         document.getElementById('player-count').textContent = this.perfMetrics.playerCount;
-        document.getElementById('network-latency').textContent = this.perfMetrics.networkLatency.toFixed(0);
+        document.getElementById('ping').textContent = this.perfMetrics.ping;
+        document.getElementById('avg-ping').textContent = this.perfMetrics.avgPing;
+    }
+    
+    // Add a particle count control slider
+    addParticleControl() {
+        const controlContainer = document.createElement('div');
+        controlContainer.className = 'particle-control';
+        
+        // Create the interface
+        controlContainer.innerHTML = `
+            <h3>Server Particles</h3>
+            <div class="control-row">
+                <input type="range" id="particle-slider" min="500" max="10000" step="500" value="1000">
+                <span id="particle-value">1000</span>
+            </div>
+            <button id="update-particles">Update</button>
+        `;
+        
+        // Add to multiplayer container
+        document.getElementById('multiplayer-container').appendChild(controlContainer);
+        
+        // Set up event listeners
+        const slider = document.getElementById('particle-slider');
+        const valueDisplay = document.getElementById('particle-value');
+        const updateButton = document.getElementById('update-particles');
+        
+        slider.addEventListener('input', () => {
+            valueDisplay.textContent = slider.value;
+        });
+        
+        updateButton.addEventListener('click', () => {
+            const count = parseInt(slider.value);
+            this.sendParticleCountUpdate(count);
+        });
+    }
+    
+    // Send a request to update the server's particle count
+    sendParticleCountUpdate(count) {
+        if (this.socket && this.socket.readyState === WebSocket.OPEN) {
+            this.socket.send(JSON.stringify({
+                type: 'setParticleCount',
+                count: count
+            }));
+        }
     }
     
     // Update performance metrics from server data
@@ -380,6 +495,14 @@ class MultiplayerClient {
         this.perfMetrics.avgPhysicsTime = metrics.avgPhysicsTime;
         this.perfMetrics.particleCount = metrics.particleCount;
         this.perfMetrics.playerCount = metrics.playerCount;
+        
+        // Update particle slider to match server (if different)
+        const slider = document.getElementById('particle-slider');
+        const valueDisplay = document.getElementById('particle-value');
+        if (slider && valueDisplay && parseInt(slider.value) !== metrics.particleCount) {
+            slider.value = metrics.particleCount;
+            valueDisplay.textContent = metrics.particleCount;
+        }
         
         // Calculate network latency (time between server sending and client receiving)
         // We need to account for any clock offset between client and server
