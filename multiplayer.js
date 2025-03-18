@@ -468,6 +468,25 @@ class MultiplayerClient {
         const valueDisplay = document.getElementById('particle-value');
         const updateButton = document.getElementById('update-particles');
         
+        // Track slider interaction
+        this.isSliderBeingDragged = false;
+        
+        slider.addEventListener('mousedown', () => {
+            this.isSliderBeingDragged = true;
+        });
+        
+        slider.addEventListener('touchstart', () => {
+            this.isSliderBeingDragged = true;
+        });
+        
+        window.addEventListener('mouseup', () => {
+            this.isSliderBeingDragged = false;
+        });
+        
+        window.addEventListener('touchend', () => {
+            this.isSliderBeingDragged = false;
+        });
+        
         slider.addEventListener('input', () => {
             valueDisplay.textContent = slider.value;
         });
@@ -496,10 +515,10 @@ class MultiplayerClient {
         this.perfMetrics.particleCount = metrics.particleCount;
         this.perfMetrics.playerCount = metrics.playerCount;
         
-        // Update particle slider to match server (if different)
+        // Update particle slider to match server (if different and not being dragged)
         const slider = document.getElementById('particle-slider');
         const valueDisplay = document.getElementById('particle-value');
-        if (slider && valueDisplay && parseInt(slider.value) !== metrics.particleCount) {
+        if (slider && valueDisplay && parseInt(slider.value) !== metrics.particleCount && !this.isSliderBeingDragged) {
             slider.value = metrics.particleCount;
             valueDisplay.textContent = metrics.particleCount;
         }

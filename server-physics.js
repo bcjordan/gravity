@@ -29,7 +29,10 @@ class ServerPhysicsSimulation {
         this.particles = [];
         this.velocities = [];
         
-        for (let i = 0; i < this.options.particleCount; i++) {
+        // Use the current particle count from options (which may have been updated)
+        const count = this.options.particleCount;
+        
+        for (let i = 0; i < count; i++) {
             // Random position in a 2D circle
             let radius, theta;
             
