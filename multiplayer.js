@@ -441,11 +441,18 @@ class MultiplayerClient {
         });
         
         window.addEventListener('mouseup', () => {
-            this.isSliderBeingDragged = false;
+            // Set a timeout to allow time for slider update to complete
+            // before allowing server to sync the value back
+            setTimeout(() => {
+                this.isSliderBeingDragged = false;
+            }, 1000); // 1 second delay
         });
         
         window.addEventListener('touchend', () => {
-            this.isSliderBeingDragged = false;
+            // Set a timeout to allow time for slider update to complete
+            setTimeout(() => {
+                this.isSliderBeingDragged = false;
+            }, 1000); // 1 second delay
         });
         
         slider.addEventListener('input', () => {
@@ -455,6 +462,13 @@ class MultiplayerClient {
         updateButton.addEventListener('click', () => {
             const count = parseInt(slider.value);
             this.sendParticleCountUpdate(count);
+            
+            // When update button is clicked, keep considering the slider in use
+            // for a bit longer to prevent immediate server update from resetting it
+            this.isSliderBeingDragged = true;
+            setTimeout(() => {
+                this.isSliderBeingDragged = false;
+            }, 1000);
         });
     }
     
