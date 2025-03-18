@@ -10,7 +10,6 @@ class MultiplayerClient {
         // Server simulation state
         this.serverParticles = [];
         this.receivedServerState = false;
-        this.interpolationBuffer = [];
         this.serverTime = 0;
         this.lastUpdateTime = 0;
         
@@ -235,21 +234,6 @@ class MultiplayerClient {
                     this.serverTime = data.time;
                     this.receivedServerState = true;
                     
-                    // Add to interpolation buffer
-                    this.interpolationBuffer.push({
-                        particles: data.particles,
-                        time: data.time,
-                        timestamp: receiveTime
-                    });
-                    
-                    // Increase buffer size for higher ping situations
-                    const bufferSize = Math.max(5, Math.min(10, Math.ceil(this.perfMetrics.avgPing / 20)));
-                    
-                    // Limit buffer size
-                    if (this.interpolationBuffer.length > bufferSize) {
-                        this.interpolationBuffer.shift();
-                    }
-                    
                     // Update client display
                     if (this.simulator) {
                         this.simulator.updateServerParticles(this.serverParticles);
@@ -270,13 +254,6 @@ class MultiplayerClient {
                     this.players = data.state.players;
                     this.serverTime = data.state.simulationTime;
                     this.receivedServerState = true;
-                    
-                    // Clear interpolation buffer and add new state
-                    this.interpolationBuffer = [{
-                        particles: data.state.particles,
-                        time: data.state.simulationTime,
-                        timestamp: fullStateReceiveTime
-                    }];
                     
                     // Update the client display
                     if (this.simulator) {
@@ -372,54 +349,6 @@ class MultiplayerClient {
         if (this.simulator) {
             this.simulator.updateMultiplayerGravityPoints(this.players, this.playerId);
         }
-    }
-    
-    getInterpolatedParticles() {
-        if (this.interpolationBuffer.length < 2) {
-            return this.serverParticles;
-        }
-        
-        const now = Date.now();
-        
-        // Adaptive interpolation delay based on network conditions
-        // Use a larger delay when ping is higher, smaller when ping is lower
-        // Minimum 30ms, maximum 100ms, scaled based on ping
-        const pingBasedDelay = Math.min(100, Math.max(30, this.perfMetrics.avgPing * 0.5));
-        const targetTime = now - pingBasedDelay;
-        
-        // Find the two states to interpolate between
-        let state1 = this.interpolationBuffer[0];
-        let state2 = this.interpolationBuffer[1];
-        
-        // Sort buffer by timestamp just in case of out-of-order packets
-        const sortedBuffer = [...this.interpolationBuffer].sort((a, b) => a.timestamp - b.timestamp);
-        
-        // Find proper interpolation states
-        for (let i = 1; i < sortedBuffer.length; i++) {
-            if (sortedBuffer[i].timestamp > targetTime) {
-                state1 = sortedBuffer[i - 1];
-                state2 = sortedBuffer[i];
-                break;
-            }
-        }
-        
-        // Calculate interpolation factor (0 to 1)
-        const timeDiff = state2.timestamp - state1.timestamp;
-        if (timeDiff <= 0) return state2.particles;
-        
-        // Use smooth step function for interpolation factor to reduce "jerky" motion
-        let factor = Math.max(0, Math.min(1, (targetTime - state1.timestamp) / timeDiff));
-        // Apply smoothstep: 3x^2 - 2x^3 for smoother transitions
-        factor = factor * factor * (3 - 2 * factor);
-        
-        // Interpolate between states
-        return state1.particles.map((p1, index) => {
-            const p2 = state2.particles[index];
-            return {
-                x: p1.x + (p2.x - p1.x) * factor,
-                y: p1.y + (p2.y - p1.y) * factor
-            };
-        });
     }
     
     updateDisplay() {
