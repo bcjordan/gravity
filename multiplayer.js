@@ -12,6 +12,7 @@ class MultiplayerClient {
         this.receivedServerState = false;
         this.interpolationBuffer = [];
         this.serverTime = 0;
+        this.lastUpdateTime = 0;
         
         // Performance metrics
         this.perfMetrics = {
@@ -23,7 +24,8 @@ class MultiplayerClient {
             avgNetworkLatency: 0,
             messageCount: 0,
             ping: 0,           // Round-trip ping time
-            avgPing: 0         // Average ping time
+            avgPing: 0,        // Average ping time
+            updateInterval: 0  // Time between server updates
         };
         
         // Ping tracking
@@ -220,6 +222,14 @@ class MultiplayerClient {
                     // Calculate network latency
                     const receiveTime = Date.now();
                     
+                    // Calculate time between server updates
+                    if (this.lastUpdateTime > 0) {
+                        const updateInterval = receiveTime - this.lastUpdateTime;
+                        // Update rolling average (90% old value, 10% new value)
+                        this.perfMetrics.updateInterval = this.perfMetrics.updateInterval * 0.9 + updateInterval * 0.1;
+                    }
+                    this.lastUpdateTime = receiveTime;
+                    
                     // Store the server particles for rendering
                     this.serverParticles = data.particles;
                     this.serverTime = data.time;
@@ -232,8 +242,11 @@ class MultiplayerClient {
                         timestamp: receiveTime
                     });
                     
+                    // Increase buffer size for higher ping situations
+                    const bufferSize = Math.max(5, Math.min(10, Math.ceil(this.perfMetrics.avgPing / 20)));
+                    
                     // Limit buffer size
-                    if (this.interpolationBuffer.length > 5) {
+                    if (this.interpolationBuffer.length > bufferSize) {
                         this.interpolationBuffer.shift();
                     }
                     
@@ -367,16 +380,25 @@ class MultiplayerClient {
         }
         
         const now = Date.now();
-        const targetTime = now - 50; // Interpolate 50ms behind for smoothness
+        
+        // Adaptive interpolation delay based on network conditions
+        // Use a larger delay when ping is higher, smaller when ping is lower
+        // Minimum 30ms, maximum 100ms, scaled based on ping
+        const pingBasedDelay = Math.min(100, Math.max(30, this.perfMetrics.avgPing * 0.5));
+        const targetTime = now - pingBasedDelay;
         
         // Find the two states to interpolate between
         let state1 = this.interpolationBuffer[0];
         let state2 = this.interpolationBuffer[1];
         
-        for (let i = 1; i < this.interpolationBuffer.length; i++) {
-            if (this.interpolationBuffer[i].timestamp > targetTime) {
-                state1 = this.interpolationBuffer[i - 1];
-                state2 = this.interpolationBuffer[i];
+        // Sort buffer by timestamp just in case of out-of-order packets
+        const sortedBuffer = [...this.interpolationBuffer].sort((a, b) => a.timestamp - b.timestamp);
+        
+        // Find proper interpolation states
+        for (let i = 1; i < sortedBuffer.length; i++) {
+            if (sortedBuffer[i].timestamp > targetTime) {
+                state1 = sortedBuffer[i - 1];
+                state2 = sortedBuffer[i];
                 break;
             }
         }
@@ -385,7 +407,10 @@ class MultiplayerClient {
         const timeDiff = state2.timestamp - state1.timestamp;
         if (timeDiff <= 0) return state2.particles;
         
-        const factor = Math.max(0, Math.min(1, (targetTime - state1.timestamp) / timeDiff));
+        // Use smooth step function for interpolation factor to reduce "jerky" motion
+        let factor = Math.max(0, Math.min(1, (targetTime - state1.timestamp) / timeDiff));
+        // Apply smoothstep: 3x^2 - 2x^3 for smoother transitions
+        factor = factor * factor * (3 - 2 * factor);
         
         // Interpolate between states
         return state1.particles.map((p1, index) => {
@@ -422,6 +447,7 @@ class MultiplayerClient {
                 <div>Players: <span id="player-count">0</span></div>
                 <div>Ping: <span id="ping">0</span> ms</div>
                 <div>Avg Ping: <span id="avg-ping">0</span> ms</div>
+                <div>Update Interval: <span id="update-interval">0</span> ms</div>
             </div>
         `;
         
@@ -443,6 +469,12 @@ class MultiplayerClient {
         document.getElementById('player-count').textContent = this.perfMetrics.playerCount;
         document.getElementById('ping').textContent = this.perfMetrics.ping;
         document.getElementById('avg-ping').textContent = this.perfMetrics.avgPing;
+        
+        // Add update interval display (if element exists)
+        const updateIntervalElement = document.getElementById('update-interval');
+        if (updateIntervalElement) {
+            updateIntervalElement.textContent = this.perfMetrics.updateInterval.toFixed(0);
+        }
     }
     
     // Add a particle count control slider
