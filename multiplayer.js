@@ -394,7 +394,7 @@ class MultiplayerClient {
         // Update UI elements with current metrics
         document.getElementById('physics-time').textContent = this.perfMetrics.physicsTime.toFixed(2);
         document.getElementById('avg-physics').textContent = this.perfMetrics.avgPhysicsTime.toFixed(2);
-        document.getElementById('particle-count').textContent = this.perfMetrics.particleCount;
+        document.getElementById('particle-count').textContent = this.perfMetrics.particleCount.toLocaleString();
         document.getElementById('player-count').textContent = this.perfMetrics.playerCount;
         document.getElementById('ping').textContent = this.perfMetrics.ping;
         document.getElementById('avg-ping').textContent = this.perfMetrics.avgPing;
@@ -415,8 +415,8 @@ class MultiplayerClient {
         controlContainer.innerHTML = `
             <h3>Server Particles</h3>
             <div class="control-row">
-                <input type="range" id="particle-slider" min="500" max="10000" step="500" value="1000">
-                <span id="particle-value">1000</span>
+                <input type="range" id="particle-slider" min="500" max="5000000" step="500" value="1000">
+                <span id="particle-value">1,000</span>
             </div>
             <button id="update-particles">Update</button>
         `;
@@ -456,7 +456,9 @@ class MultiplayerClient {
         });
         
         slider.addEventListener('input', () => {
-            valueDisplay.textContent = slider.value;
+            // Format the value with commas for thousands separators
+            const formattedValue = parseInt(slider.value).toLocaleString();
+            valueDisplay.textContent = formattedValue;
         });
         
         updateButton.addEventListener('click', () => {
@@ -495,7 +497,8 @@ class MultiplayerClient {
         const valueDisplay = document.getElementById('particle-value');
         if (slider && valueDisplay && parseInt(slider.value) !== metrics.particleCount && !this.isSliderBeingDragged) {
             slider.value = metrics.particleCount;
-            valueDisplay.textContent = metrics.particleCount;
+            // Format the value with commas for thousands separators
+            valueDisplay.textContent = metrics.particleCount.toLocaleString();
         }
         
         // Calculate network latency (time between server sending and client receiving)

@@ -292,7 +292,7 @@ canvas {
 .particle-control #particle-value {
     color: #00ffff;
     font-weight: bold;
-    width: 45px;
+    width: 80px;
     text-align: right;
     text-shadow: 0 0 3px rgba(0, 255, 255, 0.5);
 }

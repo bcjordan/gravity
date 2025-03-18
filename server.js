@@ -93,7 +93,7 @@ const server = Bun.serve({
                 else if (data.type === "setParticleCount" && data.count) {
                     // Admin command to change particle count
                     console.log(`Player ${playerId} changing particle count to ${data.count}`);
-                    physicsSimulation.options.particleCount = Math.min(10000, Math.max(500, data.count));
+                    physicsSimulation.options.particleCount = Math.min(5000000, Math.max(500, data.count));
                     physicsSimulation.resetSimulation();
                     
                     // Broadcast system message about the change
