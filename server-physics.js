@@ -28,6 +28,7 @@ class ServerPhysicsSimulation {
     initParticles() {
         this.particles = [];
         this.velocities = [];
+        this.colors = [];
         
         // Use the current particle count from options (which may have been updated)
         const count = this.options.particleCount;
@@ -71,9 +72,17 @@ class ServerPhysicsSimulation {
                 vy = Math.random() * this.options.initialSpeed - this.options.initialSpeed/2;
             }
             
-            // Store position and velocity
+            // Generate random RGB color components
+            const color = {
+                r: Math.random(),
+                g: Math.random(),
+                b: Math.random()
+            };
+            
+            // Store position, velocity, and color
             this.particles.push(particle);
             this.velocities.push({ x: vx, y: vy });
+            this.colors.push(color);
         }
     }
     
@@ -122,6 +131,72 @@ class ServerPhysicsSimulation {
         for (let i = 0; i < this.particles.length; i++) {
             const particle = this.particles[i];
             const velocity = this.velocities[i];
+            const color = this.colors[i];
+            
+            // For each player, calculate color-based prismatic forces
+            Object.values(this.players).forEach(player => {
+                const toCenterX = player.position.x - particle.x;
+                const toCenterY = player.position.y - particle.y;
+                const centerDist = Math.sqrt(toCenterX * toCenterX + toCenterY * toCenterY);
+                
+                if (centerDist < player.prismRadius * 1.5) {
+                    const dirX = toCenterX / centerDist;
+                    const dirY = toCenterY / centerDist;
+                    
+                    let dispersionForce;
+                    if (centerDist < player.prismRadius) {
+                        // Inside prism - dispersive force pushing outward
+                        const normalizedDist = centerDist / player.prismRadius;
+                        dispersionForce = player.prismStrength * 2.0 * normalizedDist;
+                    } else {
+                        // Outside but near - lensing effect
+                        const outsideDistance = centerDist - player.prismRadius;
+                        const falloff = Math.max(0, 1 - outsideDistance / (player.prismRadius * 0.5));
+                        dispersionForce = -player.prismStrength * 0.5 * falloff;
+                    }
+                    
+                    // Color-dependent dispersion effect
+                    const dispersionMultiplier = player.lensingStrength * 1.5;
+                    
+                    // Each color component affects motion differently
+                    const rForce = dispersionForce * (1.0 - dispersionMultiplier * 0.8);
+                    const gForce = dispersionForce;
+                    const bForce = dispersionForce * (1.0 + dispersionMultiplier * 1.0);
+                    
+                    // Calculate dominant force based on particle color
+                    const redDominance = color.r / Math.max(0.01, Math.max(color.g, color.b));
+                    const greenDominance = color.g / Math.max(0.01, Math.max(color.r, color.b));
+                    const blueDominance = color.b / Math.max(0.01, Math.max(color.r, color.g));
+                    
+                    let dominantForce;
+                    let perpX = 0, perpY = 0;
+                    
+                    if (redDominance > 1.3) {
+                        dominantForce = rForce * 0.3;
+                        perpX = -dirY * 0.6 * player.lensingStrength;
+                        perpY = dirX * 0.6 * player.lensingStrength;
+                    } else if (greenDominance > 1.3) {
+                        dominantForce = gForce * 0.6;
+                        perpX = (-dirY * 0.7 + dirX * 0.3) * 0.3 * player.lensingStrength;
+                        perpY = (dirX * 0.7 + dirY * 0.3) * 0.3 * player.lensingStrength;
+                    } else if (blueDominance > 1.3) {
+                        dominantForce = bForce * 1.5;
+                        perpX = dirY * 0.7 * player.lensingStrength;
+                        perpY = -dirX * 0.7 * player.lensingStrength;
+                    } else {
+                        const colorSum = color.r + color.g + color.b;
+                        dominantForce = (color.r * rForce + color.g * gForce + color.b * bForce) / Math.max(0.1, colorSum);
+                        const perpFactor = 0.3 * player.lensingStrength * (Math.random() - 0.5);
+                        perpX = dirY * perpFactor;
+                        perpY = -dirX * perpFactor;
+                    }
+                    
+                    // Apply forces with jitter
+                    const jitter = (Math.random() * 0.5 - 0.25) * dispersionForce * player.lensingStrength;
+                    velocity.x -= (dirX * (dominantForce + jitter) - perpX) * timeScale;
+                    velocity.y -= (dirY * (dominantForce + jitter) - perpY) * timeScale;
+                }
+            });
             
             // Apply weak gravity toward center of simulation (stable orbits)
             const toCenterX = -particle.x;
@@ -158,7 +233,7 @@ class ServerPhysicsSimulation {
                     velocity.x += toPlayerX * norm * totalForce;
                     velocity.y += toPlayerY * norm * totalForce;
                     
-                    // Simplified prism effect for particles near player's prism
+                    // Enhanced prism effect for particles near player's prism
                     if (playerDist < player.prismRadius * 1.5) {
                         // Either pushing out from center or pulling in from edge
                         let prismForce;
@@ -168,11 +243,83 @@ class ServerPhysicsSimulation {
                             const normalizedDist = playerDist / player.prismRadius;
                             // Use player's prismStrength if available
                             const strength = player.prismStrength || 2.0;
-                            prismForce = 0.2 * normalizedDist * timeScale * strength;
                             
-                            // Apply force against gravity direction
+                            // Dramatically enhanced color-based dispersion physics for server
+                            // Simulation will assign "virtual colors" to particles for physics calculations
+                            
+                            // Get or assign a "virtual color" for this particle
+                            // We'll use a deterministic approach based on particle index
+                            if (!this.particleVirtualColors) {
+                                // Initialize array of "virtual colors" for particles
+                                this.particleVirtualColors = new Array(this.particles.length);
+                                for (let j = 0; j < this.particles.length; j++) {
+                                    // Assign one of 6 "color types" to each particle
+                                    // 0-1: Reds, 2-3: Greens, 4-5: Blues
+                                    this.particleVirtualColors[j] = Math.floor(Math.random() * 6);
+                                }
+                            }
+                            
+                            // Get this particle's virtual color (or assign one if it doesn't exist)
+                            const virtualColor = this.particleVirtualColors[i] || 
+                                                (this.particleVirtualColors[i] = Math.floor(Math.random() * 6));
+                            
+                            const dispersionStrength = player.prismDispersion || 3.0;
+                            let colorFactor = 1.0;
+                            let perpFactor = 0;
+                            let perpSign = 1;
+                            
+                            // Apply different physics based on "virtual color"
+                            if (virtualColor < 2) {
+                                // "Red" particles - less radial force, more perpendicular motion
+                                colorFactor = 0.7 - (dispersionStrength * 0.15);
+                                perpFactor = 0.6 * dispersionStrength * timeScale;
+                                perpSign = -1; // Counter-clockwise motion
+                            } 
+                            else if (virtualColor < 4) {
+                                // "Green" particles - medium effects
+                                colorFactor = 1.0;
+                                perpFactor = 0.3 * dispersionStrength * timeScale;
+                                perpSign = (Math.random() < 0.5 ? -1 : 1); // Random direction
+                            }
+                            else {
+                                // "Blue" particles - stronger radial force, strong perpendicular motion
+                                colorFactor = 1.3 + (dispersionStrength * 0.2);
+                                perpFactor = 0.7 * dispersionStrength * timeScale;
+                                perpSign = 1; // Clockwise motion
+                            }
+                            
+                            // Strengthen the overall effect significantly
+                            const effectMultiplier = strength * 1.5; // Higher multiplier for stronger effect
+                            
+                            // Calculate base prism force
+                            prismForce = normalizedDist * timeScale * effectMultiplier * colorFactor;
+                            
+                            // Apply force against gravity direction (scaled by color)
                             velocity.x -= toPlayerX * norm * prismForce;
                             velocity.y -= toPlayerY * norm * prismForce;
+                            
+                            // Add perpendicular force for dramatic rainbow-like separation
+                            const perpX = -toPlayerY * norm * perpSign;
+                            const perpY = toPlayerX * norm * perpSign;
+                            
+                            // Apply perpendicular force (much stronger)
+                            const perpStrength = Math.abs(prismForce) * perpFactor * effectMultiplier;
+                            velocity.x += perpX * perpStrength;
+                            velocity.y += perpY * perpStrength;
+                            
+                            // Add some randomness to create a more natural dispersion effect
+                            const jitterStrength = prismForce * 0.4 * dispersionStrength;
+                            velocity.x += (Math.random() - 0.5) * jitterStrength; 
+                            velocity.y += (Math.random() - 0.5) * jitterStrength;
+                        } else {
+                            // Outside but near the prism - subtle lensing effect
+                            const outsideDistance = playerDist - player.prismRadius;
+                            const falloff = Math.max(0, 1 - outsideDistance / (player.prismRadius * 0.5));
+                            prismForce = -0.1 * player.prismStrength * falloff * timeScale;
+                            
+                            // Apply gentle inward force with randomization
+                            velocity.x += toPlayerX * norm * prismForce * (0.8 + Math.random() * 0.4);
+                            velocity.y += toPlayerY * norm * prismForce * (0.8 + Math.random() * 0.4);
                         }
                     }
                 }
